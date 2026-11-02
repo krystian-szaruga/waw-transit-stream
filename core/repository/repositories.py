@@ -13,7 +13,6 @@ class Repository[Resource](ABC):
         self._provider = provider
 
 
-
 class SaveRepository[Resource, Payload, Result](Repository[Resource]):
 
     @abstractmethod
