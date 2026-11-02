@@ -1,3 +1,5 @@
+import io
+import zipfile
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import IntEnum
@@ -50,6 +52,37 @@ class GtfsFeed:
                 usecols=["service_id", "date", "exception_type"],
             ),
         )
+
+    @classmethod
+    def from_zip(cls, content: bytes) -> "GtfsFeed":
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            def read(name: str, **kwargs) -> pd.DataFrame:
+                return pd.read_csv(archive.open(name), **kwargs)
+
+            return cls(
+                routes=read(
+                    "routes.txt", dtype=str,
+                    usecols=["route_id", "route_short_name", "route_type"],
+                ),
+                trips=read(
+                    "trips.txt", dtype=str,
+                    usecols=["route_id", "service_id", "trip_id", "block_short_name"],
+                ),
+                stop_times=read(
+                    "stop_times.txt",
+                    usecols=["trip_id", "stop_id", "stop_sequence", "arrival_time"],
+                    dtype={"trip_id": str, "stop_id": str, "stop_sequence": "int32"},
+                ),
+                stops=read(
+                    "stops.txt",
+                    usecols=["stop_id", "stop_name", "stop_lat", "stop_lon"],
+                    dtype={"stop_id": str},
+                ),
+                calendar_dates=read(
+                    "calendar_dates.txt", dtype=str,
+                    usecols=["service_id", "date", "exception_type"],
+                ),
+            )
 
 
 class TimetableBuilder:

@@ -1,9 +1,10 @@
 import logging
 
 from core import timed
-from database import create_timetable_repository
+from database import create_timetable_writer
 from loader import TimetableLoader
-from topology.request.request import WarsawGtfsDownloader
+from loader.builder import GtfsFeed
+from request import WarsawGtfsDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     with timed("total"):
         with timed("download"):
-            feed_dir = WarsawGtfsDownloader(target_dir="data").download()
-        loader = TimetableLoader(create_timetable_repository())
-        with timed("load (read csv + build + save)"):
-            loaded = loader.run(feed_dir)
+            content = WarsawGtfsDownloader().download()
+        loader = TimetableLoader(create_timetable_writer())
+        with timed("load (read zip + build + save)"):
+            loaded = loader.run(GtfsFeed.from_zip(content))
         logger.info("Loaded %d timetable rows", loaded)
 
 
