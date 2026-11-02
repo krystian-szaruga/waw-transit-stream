@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: waw-transit-infra
+  labels:
+    app: waw-transit-infra
+spec:
+  restartPolicy: Always
+  containers:
+  - name: kafka
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+    - containerPort: 9092
+      hostPort: 9092
+    env:
+    - name: KAFKA_NODE_ID
+      value: "${KAFKA_NODE_ID}"
+    - name: KAFKA_PROCESS_ROLES
+      value: "${KAFKA_PROCESS_ROLES}"
+    - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+      value: "${KAFKA_CONTROLLER_QUORUM_VOTERS}"
+    - name: KAFKA_LISTENERS
+      value: "${KAFKA_LISTENERS}"
+    - name: KAFKA_ADVERTISED_LISTENERS
+      value: "${KAFKA_ADVERTISED_LISTENERS}"
+    - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+      value: "${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}"
+    - name: KAFKA_INTER_BROKER_LISTENER_NAME
+      value: "${KAFKA_INTER_BROKER_LISTENER_NAME}"
+    - name: KAFKA_CONTROLLER_LISTENER_NAMES
+      value: "${KAFKA_CONTROLLER_LISTENER_NAMES}"
+    - name: KAFKA_LOG_DIRS
+      value: "${KAFKA_LOG_DIRS}"
+    - name: CLUSTER_ID
+      value: "${CLUSTER_ID}"
+    - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+      value: "${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}"
+    - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+      value: "${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR}"
+    - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+      value: "${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR}"
+    - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+      value: "${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}"
+    - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+      value: "${KAFKA_AUTO_CREATE_TOPICS_ENABLE}"
+    - name: KAFKA_NUM_PARTITIONS
+      value: "${KAFKA_NUM_PARTITIONS}"
+
+  - name: kafka-topic-init
+    image: confluentinc/cp-kafka:7.5.0
+    command: ["/bin/bash", "-c"]
+
+  - name: postgres
+    image: postgis/postgis:15-3.3
+    ports:
+    - containerPort: 5432
+      hostPort: 5432
+    env:
+    - name: POSTGRES_USER
+      value: "${DB_USER}"
+    - name: POSTGRES_PASSWORD
+      value: "${DB_PASSWORD}"
+    - name: POSTGRES_DB
+      value: "${DB_NAME}"
+    volumeMounts:
+    - mountPath: /var/lib/postgresql/data
+      name: postgres-data
+    - mountPath: /docker-entrypoint-initdb.d:z
+      name: postgres-init-dir
+      readOnly: true
+
+  volumes:
+  - name: postgres-data
+    hostPath:
+      path: ./postgres_data
+      type: DirectoryOrCreate
+  - name: postgres-init-dir
+    hostPath:
+      path: ./database
+      type: Directory
