@@ -12,37 +12,6 @@ from core import ConfigLoader
 from core import Provider
 
 
-@dataclass(frozen=True)
-class _PgParams:
-    dsn: str
-    user: str
-    password: str
-    db_host: str
-    db_port: int
-    db_name: str
-    schema: str = "public"
-    application_name: str = "transit"
-    connect_timeout: int = 10
-
-
-class _DatabaseConfigLoader(ConfigLoader):
-    @override
-    def  _read(self) -> _PgParams:
-        host = self._env_reader.get("DB_HOST", "127.0.0.1")
-        port = self._env_reader.get_int("DB_PORT", 5432)
-        name = self._env_reader.get("DB_NAME", "warsaw_transit")
-        return _PgParams(
-            dsn=f"host={host} port={port} dbname={name}",
-            user=self._env_reader.require("DB_USER"),
-            password=self._env_reader.require("DB_PASSWORD"),
-            db_host=self._env_reader.get("DB_HOST", "127.0.0.1"),
-            db_port=self._env_reader.get_int("DB_PORT", 5432),
-            db_name=self._env_reader.get("DB_NAME", "warsaw_transit"),
-            schema=self._env_reader.get("DB_SCHEMA", "public"),
-            application_name="waw-transit",
-        )
-
-
 class PgCursorProvider(Provider[cursor]):
     def __init__(self, pg: _PgParams, *, autocommit: bool = False) -> None:
         self._pg = pg
@@ -66,3 +35,34 @@ class PgCursorProvider(Provider[cursor]):
 
 def create_provider() -> PgCursorProvider:
     return PgCursorProvider(_DatabaseConfigLoader().load())
+
+
+class _DatabaseConfigLoader(ConfigLoader):
+    @override
+    def  _read(self) -> _PgParams:
+        host = self._env_reader.get("DB_HOST", "127.0.0.1")
+        port = self._env_reader.get_int("DB_PORT", 5432)
+        name = self._env_reader.get("DB_NAME", "warsaw_transit")
+        return _PgParams(
+            dsn=f"host={host} port={port} dbname={name}",
+            user=self._env_reader.require("DB_USER"),
+            password=self._env_reader.require("DB_PASSWORD"),
+            db_host=self._env_reader.get("DB_HOST", "127.0.0.1"),
+            db_port=self._env_reader.get_int("DB_PORT", 5432),
+            db_name=self._env_reader.get("DB_NAME", "warsaw_transit"),
+            schema=self._env_reader.get("DB_SCHEMA", "public"),
+            application_name="waw-transit",
+        )
+
+
+@dataclass(frozen=True)
+class _PgParams:
+    dsn: str
+    user: str
+    password: str
+    db_host: str
+    db_port: int
+    db_name: str
+    schema: str = "public"
+    application_name: str = "transit"
+    connect_timeout: int = 10

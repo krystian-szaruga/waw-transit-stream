@@ -8,15 +8,6 @@ from pathlib import Path
 import pandas as pd
 
 
-class _VehicleType(IntEnum):
-    BUS = 1
-    TRAM = 2
-
-    @property
-    def gtfs_route_type(self) -> int:
-        return 3 if self is _VehicleType.BUS else 0
-
-
 @dataclass(frozen=True)
 class GtfsFeed:
     routes: pd.DataFrame
@@ -91,6 +82,14 @@ class TimetableBuilder:
         "stop_id", "stop_name", "stop_sequence", "stop_lat", "stop_lon", "scheduled_arrival_offset",
     ]
 
+    class _VehicleType(IntEnum):
+        BUS = 1
+        TRAM = 2
+
+        @property
+        def gtfs_route_type(self) -> int:
+            return 3 if self is type(self).BUS else 0
+
     def __init__(
         self,
         feed: GtfsFeed,
@@ -114,6 +113,13 @@ class TimetableBuilder:
             .merge(self._feed.stops, on="stop_id", validate="m:1")
         )
         return timetable[self.COLUMNS].reset_index(drop=True)
+
+    @staticmethod
+    def time_to_offset(times: pd.Series) -> pd.Series:
+        unique = pd.Series(times.unique())
+        parts = unique.str.strip().str.split(":", expand=True).astype(int)
+        lookup = dict(zip(unique, parts[0] * 3600 + parts[1] * 60 + parts[2]))
+        return times.map(lookup)
 
     def _active_services(self) -> pd.DataFrame:
         cal = self._feed.calendar_dates
@@ -147,10 +153,3 @@ class TimetableBuilder:
         return st.assign(
             scheduled_arrival_offset=self.time_to_offset(st["arrival_time"])
         ).drop(columns="arrival_time")
-
-    @staticmethod
-    def time_to_offset(times: pd.Series) -> pd.Series:
-        unique = pd.Series(times.unique())
-        parts = unique.str.strip().str.split(":", expand=True).astype(int)
-        lookup = dict(zip(unique, parts[0] * 3600 + parts[1] * 60 + parts[2]))
-        return times.map(lookup)

@@ -4,13 +4,6 @@ import pstats
 from pathlib import Path
 
 
-def _merge(paths: list[str]) -> pstats.Stats:
-    stats = pstats.Stats(paths[0])
-    for path in paths[1:]:
-        stats.add(path)
-    return stats
-
-
 def _main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
@@ -25,6 +18,13 @@ def _main() -> None:
 
     print(f"profiles: {len(paths)}")
     _merge(paths).strip_dirs().sort_stats(args.sort).print_stats(args.top)
+
+
+def _merge(paths: list[str]) -> pstats.Stats:
+    stats = pstats.Stats(paths[0])
+    for path in paths[1:]:
+        stats.add(path)
+    return stats
 
 
 if __name__ == "__main__":
