@@ -34,11 +34,6 @@ spark-warehouse/
 metastore_db/
 derby.log
 
-# Generated debug output
-processing/dumps/
-processing/tests/data/*.parquet
-processing/tests/data/*.pkl
-
 # Local infrastructure data
 infra/postgres_data/
 
