@@ -10,7 +10,7 @@ from psycopg2.extensions import cursor
 
 from core import Provider
 from database.cursor import create_provider
-from repository import ReadRepository
+from core import ReadRepository
 
 _COLUMNS = (
     "service_date", "vehicle_type", "line", "brigade", "route_id", "trip_id", "stop_name",
