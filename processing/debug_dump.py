@@ -22,6 +22,18 @@ _DELAY = TripMatchCol.DELAY_SEC.value
 _STATUS = TripMatchCol.MATCH_STATUS.value
 
 
+def start_dump(matched: DataFrame, lookup: Lookup) -> StreamingQuery | None:
+    if not DUMP_ENABLED:
+        return None
+    save_lookup(lookup, DUMP_DIR / "lookup.pkl")
+    return (
+        matched.writeStream
+        .foreachBatch(_WorstDelayDumper(DUMP_DIR))
+        .option("checkpointLocation", DUMP_CHECKPOINT)
+        .start()
+    )
+
+
 def save_lookup(lookup: Lookup, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
@@ -71,15 +83,3 @@ class _WorstDelayDumper:
             valid[
                 (valid[_VT] == vehicle_type) & (valid[_VN] == vehicle_number)
             ].to_parquet(self._out_dir / f"{stem}.parquet")
-
-
-def start_dump(matched: DataFrame, lookup: Lookup) -> StreamingQuery | None:
-    if not DUMP_ENABLED:
-        return None
-    save_lookup(lookup, DUMP_DIR / "lookup.pkl")
-    return (
-        matched.writeStream
-        .foreachBatch(_WorstDelayDumper(DUMP_DIR))
-        .option("checkpointLocation", DUMP_CHECKPOINT)
-        .start()
-    )

@@ -14,6 +14,11 @@ from request import WarsawBusesClient, WarsawTramsClient
 logger = logging.getLogger("warsaw_transit_stream_ingest")
 
 
+def _main() -> None:
+    orchestrator = _IngestAppOrchestrator()
+    orchestrator.start()
+
+
 class _IngestAppOrchestrator:
     def __init__(self) -> None:
         self._stop_event = threading.Event()
@@ -82,11 +87,6 @@ class _IngestAppOrchestrator:
             topic=config.kafka.topic_trams
         )
         return [bus_producer, tram_producer]
-
-
-def _main() -> None:
-    orchestrator = _IngestAppOrchestrator()
-    orchestrator.start()
 
 
 if __name__ == '__main__':

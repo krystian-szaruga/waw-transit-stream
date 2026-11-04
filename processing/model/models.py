@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import bisect
 from collections import defaultdict
 from dataclasses import dataclass
@@ -83,9 +85,6 @@ class Trip:
     off_delta: np.ndarray
 
 
-_LineKey = tuple[date, VehicleType, str]
-
-
 class TripIndex:
     """Trips grouped by (service_date, vehicle_type, line); brigade is ignored."""
 
@@ -98,13 +97,6 @@ class TripIndex:
         self._max_duration = {
             key: max(trip.end - trip.start for trip in trips) for key, trips in self._idx.items()
         }
-
-    @staticmethod
-    def _create_index(trips_by_key: Mapping[TripKey, list[Trip]]) -> dict[_LineKey, list[Trip]]:
-        grouped: defaultdict[_LineKey, list[Trip]] = defaultdict(list)
-        for key, trips in trips_by_key.items():
-            grouped[(key.service_date, key.vehicle_type, key.line)].extend(trips)
-        return {k: sorted(v, key=lambda t: t.start) for k, v in grouped.items()}
 
     def get(self, service_date: date, vehicle_type: VehicleType, line: str) -> list[Trip]:
         return self._idx.get((service_date, vehicle_type, line), [])
@@ -131,6 +123,13 @@ class TripIndex:
             trip for trip in trips[left:right]
             if trip.start - layover_tol_sec <= sec <= trip.end + post_end_grace_sec
         ]
+
+    @staticmethod
+    def _create_index(trips_by_key: Mapping[TripKey, list[Trip]]) -> dict[_LineKey, list[Trip]]:
+        grouped: defaultdict[_LineKey, list[Trip]] = defaultdict(list)
+        for key, trips in trips_by_key.items():
+            grouped[(key.service_date, key.vehicle_type, key.line)].extend(trips)
+        return {k: sorted(v, key=lambda t: t.start) for k, v in grouped.items()}
 
 
 class Lookup:
@@ -168,14 +167,6 @@ class Lookup:
             service_date, vehicle_type, line, sec, layover_tol_sec, post_end_grace_sec
         )
 
-    def _add(self, trip: Trip) -> None:
-        self._trips.setdefault(trip.key, []).append(trip)
-        self.__dict__.pop("_trip_index", None)
-    
-    @cached_property
-    def _trip_index(self) -> TripIndex:
-        return TripIndex(self._trips)
-
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state.pop("_trip_index", None)
@@ -190,6 +181,14 @@ class Lookup:
 
     def __len__(self) -> int:
         return sum(len(t) for t in self._trips.values())
+
+    def _add(self, trip: Trip) -> None:
+        self._trips.setdefault(trip.key, []).append(trip)
+        self.__dict__.pop("_trip_index", None)
+
+    @cached_property
+    def _trip_index(self) -> TripIndex:
+        return TripIndex(self._trips)
 
 
 @dataclass(slots=True, frozen=True)
@@ -223,3 +222,6 @@ class MatchState:
     """Per-vehicle state carried between batches."""
     incumbent: str | None = None
     anchor: Anchor | None = None
+
+
+_LineKey = tuple[date, VehicleType, str]

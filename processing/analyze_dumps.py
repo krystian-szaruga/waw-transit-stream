@@ -10,8 +10,33 @@ from processing.model import MatchState, TripMatchCol
 from processing.assignment.trip_matcher import TripMatcher
 
 
-def _col(name: TripMatchCol) -> str:
-    return name.value
+def _main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dir", type=Path, default=DUMP_DIR)
+    parser.add_argument("--top", type=int, default=25)
+    parser.add_argument("--detail", type=int, default=10)
+    args = parser.parse_args()
+
+    cases = _load_cases(args.dir)
+    if cases.empty:
+        print(f"no cases in {args.dir}")
+        return
+    _summary(cases)
+    _top_table(cases, args.top)
+
+    lookup_path = args.dir / "lookup.pkl"
+    if not lookup_path.exists():
+        print(f"\nmissing {lookup_path}; skipping detailed replay")
+        return
+
+    with open(lookup_path, "rb") as handle:
+        lookup = pickle.load(handle)
+    matcher = TripMatcher(lookup)
+    trips = _trip_dict(lookup)
+
+    ordered = cases.sort_values(_col(TripMatchCol.DELAY_SEC), ascending=False).head(args.detail)
+    for _, row in ordered.iterrows():
+        _detail(args.dir, matcher, trips, row)
 
 
 def _load_cases(dump_dir: Path) -> pd.DataFrame:
@@ -69,49 +94,6 @@ def _trip_dict(lookup) -> dict[str, object]:
     return {trip.trip_id: trip for trip in lookup}
 
 
-def _candidate_rows(matcher, ping) -> pd.DataFrame:
-    lookup = matcher._lookup
-    cfg = matcher._config
-    x, y = lookup.project(ping.lon, ping.lat)
-    rows = []
-    for service_date in ping.service_dates():
-        sec = ping.seconds_since_midnight(service_date)
-        for trip in matcher._active_trips(ping, service_date, sec):
-            a, b = trip.xy[:-1], trip.xy[1:]
-            d = b - a
-            len2 = (d ** 2).sum(axis=1)
-            t = np.divide(
-                (x - a[:, 0]) * d[:, 0] + (y - a[:, 1]) * d[:, 1],
-                len2,
-                out=np.zeros_like(len2),
-                where=len2 > 0,
-            ).clip(0.0, 1.0)
-            dist = np.hypot(x - (a[:, 0] + t * d[:, 0]), y - (a[:, 1] + t * d[:, 1]))
-            delay = sec - (trip.off[:-1] + t * (trip.off[1:] - trip.off[:-1]))
-            idx = int(np.argmin(dist))
-            vertex = int(np.argmin(np.hypot(trip.xy[:, 0] - x, trip.xy[:, 1] - y)))
-            fit = matcher._fit(trip, x, y, sec)
-            rows.append({
-                "trip_id": trip.trip_id,
-                "first_stop": trip.stop_name[0],
-                "last_stop": trip.stop_name[-1],
-                "trip_start": trip.start,
-                "trip_end": trip.end,
-                "ended_before_ping": trip.end < sec,
-                "nearest_stop": trip.stop_name[vertex],
-                "vertex_dist": round(float(np.hypot(trip.xy[vertex, 0] - x, trip.xy[vertex, 1] - y)), 1),
-                "seg_dist": round(float(dist[idx]), 1),
-                "seg_delay": round(float(delay[idx]), 1),
-                "seg": idx,
-                "fit": fit is not None,
-                "fit_dist": None if fit is None else round(fit.dist_m, 1),
-                "fit_delay": None if fit is None else round(fit.delay_sec, 1),
-                "fit_cost": None if fit is None else round(fit.cost, 1),
-                "max_dist": cfg.max_dist_m,
-            })
-    return pd.DataFrame(rows)
-
-
 def _detail(dump_dir: Path, matcher: TripMatcher, trips: dict[str, object], row: pd.Series) -> None:
     source = str(row["source"])
     raw_path = dump_dir / f"{source.removesuffix('_matched')}.parquet"
@@ -166,33 +148,51 @@ def _detail(dump_dir: Path, matcher: TripMatcher, trips: dict[str, object], row:
     print(candidates.to_string(index=False))
 
 
-def _main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dir", type=Path, default=DUMP_DIR)
-    parser.add_argument("--top", type=int, default=25)
-    parser.add_argument("--detail", type=int, default=10)
-    args = parser.parse_args()
+def _candidate_rows(matcher, ping) -> pd.DataFrame:
+    lookup = matcher._lookup
+    cfg = matcher._config
+    x, y = lookup.project(ping.lon, ping.lat)
+    rows = []
+    for service_date in ping.service_dates():
+        sec = ping.seconds_since_midnight(service_date)
+        for trip in matcher._active_trips(ping, service_date, sec):
+            a, b = trip.xy[:-1], trip.xy[1:]
+            d = b - a
+            len2 = (d ** 2).sum(axis=1)
+            t = np.divide(
+                (x - a[:, 0]) * d[:, 0] + (y - a[:, 1]) * d[:, 1],
+                len2,
+                out=np.zeros_like(len2),
+                where=len2 > 0,
+            ).clip(0.0, 1.0)
+            dist = np.hypot(x - (a[:, 0] + t * d[:, 0]), y - (a[:, 1] + t * d[:, 1]))
+            delay = sec - (trip.off[:-1] + t * (trip.off[1:] - trip.off[:-1]))
+            idx = int(np.argmin(dist))
+            vertex = int(np.argmin(np.hypot(trip.xy[:, 0] - x, trip.xy[:, 1] - y)))
+            fit = matcher._fit(trip, x, y, sec)
+            rows.append({
+                "trip_id": trip.trip_id,
+                "first_stop": trip.stop_name[0],
+                "last_stop": trip.stop_name[-1],
+                "trip_start": trip.start,
+                "trip_end": trip.end,
+                "ended_before_ping": trip.end < sec,
+                "nearest_stop": trip.stop_name[vertex],
+                "vertex_dist": round(float(np.hypot(trip.xy[vertex, 0] - x, trip.xy[vertex, 1] - y)), 1),
+                "seg_dist": round(float(dist[idx]), 1),
+                "seg_delay": round(float(delay[idx]), 1),
+                "seg": idx,
+                "fit": fit is not None,
+                "fit_dist": None if fit is None else round(fit.dist_m, 1),
+                "fit_delay": None if fit is None else round(fit.delay_sec, 1),
+                "fit_cost": None if fit is None else round(fit.cost, 1),
+                "max_dist": cfg.max_dist_m,
+            })
+    return pd.DataFrame(rows)
 
-    cases = _load_cases(args.dir)
-    if cases.empty:
-        print(f"no cases in {args.dir}")
-        return
-    _summary(cases)
-    _top_table(cases, args.top)
 
-    lookup_path = args.dir / "lookup.pkl"
-    if not lookup_path.exists():
-        print(f"\nmissing {lookup_path}; skipping detailed replay")
-        return
-
-    with open(lookup_path, "rb") as handle:
-        lookup = pickle.load(handle)
-    matcher = TripMatcher(lookup)
-    trips = _trip_dict(lookup)
-
-    ordered = cases.sort_values(_col(TripMatchCol.DELAY_SEC), ascending=False).head(args.detail)
-    for _, row in ordered.iterrows():
-        _detail(args.dir, matcher, trips, row)
+def _col(name: TripMatchCol) -> str:
+    return name.value
 
 
 if __name__ == "__main__":

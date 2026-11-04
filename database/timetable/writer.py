@@ -10,6 +10,13 @@ from core import Provider, SaveRepository
 from database.cursor import create_provider
 
 
+def create_timetable_writer(
+        schema: str = "public",
+        table: str = "static_timetable"
+) -> SaveRepository[cursor, pd.DataFrame, int]:
+    return _TimetableWriter(create_provider(), schema, table)
+
+
 class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
     _PK_COLUMNS = ("service_date", "trip_id", "stop_sequence")
     _INDEX_COLUMNS = ("service_date", "vehicle_type", "line", "brigade")
@@ -87,10 +94,3 @@ class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
     @staticmethod
     def _identifiers(names) -> sql.Composed:
         return sql.SQL(", ").join(map(sql.Identifier, names))
-
-
-def create_timetable_writer(
-        schema: str = "public",
-        table: str = "static_timetable"
-) -> SaveRepository[cursor, pd.DataFrame, int]:
-    return _TimetableWriter(create_provider(), schema, table)

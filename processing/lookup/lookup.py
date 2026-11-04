@@ -11,6 +11,14 @@ from processing.model import Trip, TripKey, TripGeometry, Lookup, VehicleType, M
 from core.repository import ReadRepository
 
 
+class LookupLoader:
+    def __init__(self, repository: ReadRepository):
+        self._builder = _LookupBuilder(_TripLoader(repository).read())
+
+    def load(self) -> Lookup:
+        return self._builder.build()
+
+
 class _TripLoader:
     def __init__(self, repository: ReadRepository):
         self._repository = repository
@@ -122,11 +130,3 @@ class _LookupBuilder:
         )
         self._geometries[key] = geometry
         return geometry
-
-
-class LookupLoader:
-    def __init__(self, repository: ReadRepository):
-        self._builder = _LookupBuilder(_TripLoader(repository).read())
-
-    def load(self) -> Lookup:
-        return self._builder.build()
