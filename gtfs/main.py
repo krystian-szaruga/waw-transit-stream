@@ -15,7 +15,7 @@ def main() -> None:
         with timed("download"):
             content = WarsawGtfsDownloader().download()
         loader = TimetableLoader(create_timetable_writer())
-        with timed("load (read zip + build + save)"):
+        with timed("load (source zip + build + save)"):
             loaded = loader.run(GtfsFeed.from_zip(content))
         logger.info("Loaded %d timetable rows", loaded)
 
