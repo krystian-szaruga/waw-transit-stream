@@ -2,8 +2,7 @@ import threading
 
 import psycopg2
 
-
-from processing.service import PipelineService
+from processing.pipeline_service import PipelineService
 
 
 class _StoppingEvent(threading.Event):
@@ -104,7 +103,10 @@ def test_when_reading_the_version_fails_then_await_keeps_running_until_stop():
 def test_when_reloading_the_lookup_fails_then_the_old_snapshot_is_kept(mocker):
     service = _service(stop_after=1)
     current = mocker.Mock(version_id=7)
-    mocker.patch("processing.service.LookupLoader", side_effect=psycopg2.OperationalError("database is down"))
+    mocker.patch(
+        "processing.pipeline_service.LookupLoader",
+        side_effect=psycopg2.OperationalError("database is down"),
+    )
 
     assert service._reload(current) is current
 
@@ -113,6 +115,6 @@ def test_when_reloading_the_lookup_succeeds_then_the_new_snapshot_is_returned(mo
     service = _service(stop_after=100)
     current = mocker.Mock(version_id=7)
     reloaded = mocker.Mock(version_id=8)
-    mocker.patch("processing.service.LookupLoader").return_value.load.return_value = reloaded
+    mocker.patch("processing.pipeline_service.LookupLoader").return_value.load.return_value = reloaded
 
     assert service._reload(current) is reloaded
