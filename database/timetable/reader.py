@@ -29,15 +29,18 @@ class TimetableReader(ReadRepository[cursor, Sequence[date], pd.DataFrame]):
     def __init__(self, provider: Provider[cursor], schema: str = "public", table: str = "static_timetable") -> None:
         super().__init__(provider)
         self._table = sql.Identifier(schema, table)
+        self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
     def load(self, payload: Sequence[date]) -> pd.DataFrame:
         query = sql.SQL(
             "SELECT {cols} FROM {tbl} WHERE service_date = ANY(ARRAY[{dates}]::date[]) "
+            "AND gtfs_version = (SELECT version_id FROM {versions} WHERE status = 'active') "
             "ORDER BY service_date, trip_id, stop_sequence"
         ).format(
             cols=sql.SQL(", ").join(map(sql.Identifier, _COLUMNS)),
             tbl=self._table,
+            versions=self._versions,
             dates=sql.SQL(", ").join(sql.Literal(d.isoformat()) for d in payload),
         )
         buffer = io.StringIO()

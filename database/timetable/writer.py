@@ -6,67 +6,70 @@ import pandas as pd
 from psycopg2 import sql
 from psycopg2._psycopg import cursor
 
-from core import Provider, SaveRepository
+from core import Provider, SaveRepository, Payload
 from database.cursor import create_provider
 
 
 def create_timetable_writer(
         schema: str = "public",
-        table: str = "static_timetable"
+        table: str = "static_timetable",
+        versions_table: str = "gtfs_versions",
 ) -> SaveRepository[cursor, pd.DataFrame, int]:
-    return _TimetableWriter(create_provider(), schema, table)
+    return _TimetableWriter(create_provider(), schema, table, versions_table)
 
 
 class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
-    _PK_COLUMNS = ("service_date", "trip_id", "stop_sequence")
-    _INDEX_COLUMNS = ("service_date", "vehicle_type", "line", "brigade")
+    _KEEP_RETIRED = 3
 
     def __init__(
             self,
             provider: Provider[cursor],
             schema: str = "public",
             table: str = "static_timetable",
+            versions_table: str = "gtfs_versions",
     ) -> None:
         super().__init__(provider)
         self._table = sql.Identifier(schema, table)
-        self._index = sql.Identifier(schema, "idx_timetable_matching")
-        self._index_name = sql.Identifier("idx_timetable_matching")
-        self._pk = sql.Identifier(f"{table}_pkey")
+        self._versions = sql.Identifier(schema, versions_table)
 
     @override
-    def save(self, data: pd.DataFrame) -> int:
-        dates = sorted(data["service_date"].unique())
-        buffer = self._to_csv_buffer(data, dates)
+    def save(self, data: Payload[pd.DataFrame]) -> int:
         with self._provider.open() as cur:
-            self._delete_obsolete(cur, dates)
-            self._drop_indexes(cur)
-            inserted = self._copy(cur, buffer, list(data.columns))
-            self._create_indexes(cur)
-            return inserted
+            known = self._version_id(cur, data.sha256)
+            if known is not None:
+                return known
+            version_id = self._insert_version(cur, data.sha256)
+            self._copy(cur, self._to_csv_buffer(data.frame, version_id), ["gtfs_version", *data.frame.columns])
+            self._activate(cur, version_id)
+            self._prune(cur, self._KEEP_RETIRED)
+            return version_id
+
+    def _version_id(self, cur, sha256: str) -> int | None:
+        cur.execute(
+            sql.SQL("SELECT version_id FROM {tbl} WHERE sha256 = %s").format(tbl=self._versions),
+            (sha256,),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def _insert_version(self, cur, sha256: str) -> int:
+        cur.execute(
+            sql.SQL("INSERT INTO {tbl} (sha256) VALUES (%s) RETURNING version_id")
+            .format(tbl=self._versions),
+            (sha256,),
+        )
+        return cur.fetchone()[0]
 
     @staticmethod
-    def _to_csv_buffer(data: pd.DataFrame, dates: list[date]) -> io.StringIO:
+    def _to_csv_buffer(data: pd.DataFrame, version_id: int) -> io.StringIO:
         export = data.assign(
-            service_date=data["service_date"].map({d: d.isoformat() for d in dates})
-        )
+            gtfs_version=version_id,
+            service_date=data["service_date"].map(date.isoformat),
+        )[["gtfs_version", *data.columns]]
         buffer = io.StringIO()
         export.to_csv(buffer, index=False, header=False)
         buffer.seek(0)
         return buffer
-
-    def _delete_obsolete(self, cur, dates: list[date]) -> None:
-        cur.execute(
-            sql.SQL("DELETE FROM {tbl} WHERE service_date = ANY(%s) OR service_date < %s")
-            .format(tbl=self._table),
-            (dates, dates[0]),
-        )
-
-    def _drop_indexes(self, cur) -> None:
-        cur.execute(sql.SQL("DROP INDEX IF EXISTS {idx}").format(idx=self._index))
-        cur.execute(
-            sql.SQL("ALTER TABLE {tbl} DROP CONSTRAINT IF EXISTS {pk}")
-            .format(tbl=self._table, pk=self._pk)
-        )
 
     def _copy(self, cur, buffer: io.StringIO, columns: list[str]) -> int:
         cur.copy_expert(
@@ -77,19 +80,37 @@ class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
         )
         return cur.rowcount
 
-    def _create_indexes(self, cur) -> None:
+    def _activate(self, cur, version_id: int) -> None:
         cur.execute(
-            sql.SQL("ALTER TABLE {tbl} ADD PRIMARY KEY ({cols})")
-            .format(tbl=self._table, cols=self._identifiers(self._PK_COLUMNS))
+            sql.SQL("UPDATE {tbl} SET status = 'retired' WHERE status = 'active'")
+            .format(tbl=self._versions)
         )
         cur.execute(
-            sql.SQL("CREATE INDEX {idx} ON {tbl} ({cols})")
-            .format(
-                idx=self._index_name,
-                tbl=self._table,
-                cols=self._identifiers(self._INDEX_COLUMNS),
-            )
+            sql.SQL("UPDATE {tbl} SET status = 'active' WHERE version_id = %s")
+            .format(tbl=self._versions),
+            (version_id,),
         )
+
+    def _prune(self, cur, keep_retired: int) -> None:
+        kept = self._kept_versions()
+        cur.execute(
+            sql.SQL("DELETE FROM {timetable} WHERE gtfs_version NOT IN ({kept})")
+            .format(timetable=self._table, kept=kept),
+            (keep_retired,),
+        )
+        cur.execute(
+            sql.SQL("DELETE FROM {versions} WHERE version_id NOT IN ({kept})")
+            .format(versions=self._versions, kept=kept),
+            (keep_retired,),
+        )
+
+    def _kept_versions(self) -> sql.Composed:
+        return sql.SQL(
+            "SELECT version_id FROM {tbl} WHERE status = 'active' UNION "
+            "SELECT version_id FROM {tbl} WHERE version_id IN ("
+            "SELECT version_id FROM {tbl} WHERE status = 'retired' "
+            "ORDER BY loaded_at DESC LIMIT %s)"
+        ).format(tbl=self._versions)
 
     @staticmethod
     def _identifiers(names) -> sql.Composed:

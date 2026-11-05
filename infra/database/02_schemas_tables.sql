@@ -1,4 +1,21 @@
+CREATE TABLE IF NOT EXISTS gtfs_versions (
+     version_id BIGSERIAL PRIMARY KEY,
+     sha256 CHAR(64) NOT NULL UNIQUE,
+     loaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+     status TEXT NOT NULL DEFAULT 'loading'
+         CHECK (status IN ('loading', 'active', 'retired'))
+);
+
+CREATE TABLE IF NOT EXISTS gtfs_feed_state (
+     id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+     etag TEXT,
+     last_modified TEXT
+);
+
+INSERT INTO gtfs_feed_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS static_timetable (
+     gtfs_version BIGINT NOT NULL REFERENCES gtfs_versions(version_id),
      service_date DATE NOT NULL,
      vehicle_type SMALLINT NOT NULL,
      line VARCHAR(10) NOT NULL,
@@ -11,8 +28,8 @@ CREATE TABLE IF NOT EXISTS static_timetable (
      stop_lat DOUBLE PRECISION NOT NULL,
      stop_lon DOUBLE PRECISION NOT NULL,
      scheduled_arrival_offset INT NOT NULL,
-     PRIMARY KEY (service_date, trip_id, stop_sequence)
+     PRIMARY KEY (gtfs_version, service_date, trip_id, stop_sequence)
  );
 
 CREATE INDEX idx_timetable_matching
-    ON static_timetable (service_date, vehicle_type, line, brigade);
+    ON static_timetable (gtfs_version, service_date, vehicle_type, line, brigade);

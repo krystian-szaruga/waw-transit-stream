@@ -55,6 +55,10 @@ def test_when_loading_dates_then_copy_query_filters_exactly_those_days(make_read
 
     query = cursor.copy_queries[0]
     assert "service_date = ANY(ARRAY['2026-11-04', '2026-11-05']::date[])" in query
+    assert (
+        "gtfs_version = (SELECT version_id FROM public.gtfs_versions WHERE status = 'active')"
+        in query
+    )
     assert "ORDER BY service_date, trip_id, stop_sequence" in query
 
 
@@ -68,6 +72,7 @@ def test_when_reader_targets_another_table_then_copy_query_uses_it(make_reader, 
     reader.load([date(2026, 11, 4)])
 
     assert "FROM gtfs.static_timetable_archive" in cursor.copy_queries[0]
+    assert "SELECT version_id FROM gtfs.gtfs_versions" in cursor.copy_queries[0]
 
 
 def test_when_copy_returns_only_a_header_then_load_returns_empty_frame(make_reader):
