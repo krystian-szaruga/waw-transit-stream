@@ -41,3 +41,4 @@ infra/postgres_data/
 *.log
 logs/
 docs/*
+checkpoints/

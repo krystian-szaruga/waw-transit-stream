@@ -47,7 +47,7 @@ class _FlakyVersions:
 
 
 def _service(stop_after: int) -> PipelineService:
-    service = PipelineService(None)
+    service = PipelineService()
     service._stop = _StoppingEvent(stop_after)
     return service
 
