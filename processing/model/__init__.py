@@ -3,6 +3,7 @@ from .models import (
     Trip,
     TripGeometry,
     Lookup,
+    LookupSnapshot,
     VehicleType,
     WarsawLiveCol,
     TripMatchCol,
@@ -13,6 +14,6 @@ from .models import (
 from .const import M_PER_DEG
 
 __all__ = [
-    'TripKey', 'Trip', 'TripGeometry', 'Lookup', "VehicleType", "M_PER_DEG",
+    'TripKey', 'Trip', 'TripGeometry', 'Lookup', 'LookupSnapshot', "VehicleType", "M_PER_DEG",
     "WarsawLiveCol", "TripMatchCol", "MatchStatus", "MatchState", "Anchor"
 ]

@@ -22,8 +22,15 @@ _DTYPES = {
     "stop_lat": "float64", "stop_lon": "float64", "scheduled_arrival_offset": "int32",
 }
 
+def create_timetable_reader(schema: str = "public", table: str = "static_timetable") -> ReadRepository:
+    return _TimetableReader(create_provider(), schema, table)
 
-class TimetableReader(ReadRepository[cursor, Sequence[date], pd.DataFrame]):
+
+def create_version_reader(schema: str = "public") -> ReadRepository:
+    return _VersionReader(create_provider(), schema)
+
+
+class _TimetableReader(ReadRepository[cursor, Sequence[date], tuple[pd.DataFrame, int]]):
     """Reads whole service days of `static_timetable` with COPY (cheap even for ~1M rows)."""
 
     def __init__(self, provider: Provider[cursor], schema: str = "public", table: str = "static_timetable") -> None:
@@ -32,19 +39,20 @@ class TimetableReader(ReadRepository[cursor, Sequence[date], pd.DataFrame]):
         self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
-    def load(self, payload: Sequence[date]) -> pd.DataFrame:
-        query = sql.SQL(
-            "SELECT {cols} FROM {tbl} WHERE service_date = ANY(ARRAY[{dates}]::date[]) "
-            "AND gtfs_version = (SELECT version_id FROM {versions} WHERE status = 'active') "
-            "ORDER BY service_date, trip_id, stop_sequence"
-        ).format(
-            cols=sql.SQL(", ").join(map(sql.Identifier, _COLUMNS)),
-            tbl=self._table,
-            versions=self._versions,
-            dates=sql.SQL(", ").join(sql.Literal(d.isoformat()) for d in payload),
-        )
+    def load(self, payload: Sequence[date]) -> tuple[pd.DataFrame, int]:
         buffer = io.StringIO()
         with self._provider.open() as cur:
+            version_id = self._active_version(cur)
+            query = sql.SQL(
+                "SELECT {cols} FROM {tbl} WHERE service_date = ANY(ARRAY[{dates}]::date[]) "
+                "AND gtfs_version = {version} "
+                "ORDER BY service_date, trip_id, stop_sequence"
+            ).format(
+                cols=sql.SQL(", ").join(map(sql.Identifier, _COLUMNS)),
+                tbl=self._table,
+                version=sql.Literal(version_id),
+                dates=sql.SQL(", ").join(sql.Literal(d.isoformat()) for d in payload),
+            )
             cur.copy_expert(
                 sql.SQL("COPY ({q}) TO STDOUT WITH (FORMAT csv, HEADER true)").format(q=query).as_string(cur),
                 buffer,
@@ -52,8 +60,32 @@ class TimetableReader(ReadRepository[cursor, Sequence[date], pd.DataFrame]):
         buffer.seek(0)
         df = pd.read_csv(buffer, dtype=_DTYPES, keep_default_na=False)
         df["service_date"] = pd.to_datetime(df["service_date"]).dt.date
-        return df
+        return df, version_id
+
+    def _active_version(self, cur) -> int:
+        cur.execute(
+            sql.SQL("SELECT version_id FROM {tbl} WHERE status = 'active'")
+            .format(tbl=self._versions)
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("No active GTFS version in the database")
+        return int(row[0])
 
 
-def create_timetable_reader(schema: str = "public", table: str = "static_timetable") -> ReadRepository:
-    return TimetableReader(create_provider(), schema, table)
+class _VersionReader(ReadRepository[cursor, None, int]):
+    def __init__(self, provider: Provider[cursor], schema: str = "public") -> None:
+        super().__init__(provider)
+        self._versions = sql.Identifier(schema, "gtfs_versions")
+
+    @override
+    def load(self, payload: None = None) -> int:
+        with self._provider.open() as cur:
+            cur.execute(
+                sql.SQL("SELECT version_id FROM {tbl} WHERE status = 'active'")
+                .format(tbl=self._versions)
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("No active GTFS version in the database")
+        return int(row[0])

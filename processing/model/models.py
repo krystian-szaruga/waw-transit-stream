@@ -30,6 +30,7 @@ class TripMatchCol(StrEnum):
     COST = "cost"
     MATCH_STATUS = "match_status"
     API_TS = "api_timestamp"
+    GTFS_VERSION = "gtfs_version"
 
 
 class WarsawLiveCol(StrEnum):
@@ -189,6 +190,12 @@ class Lookup:
     @cached_property
     def _trip_index(self) -> TripIndex:
         return TripIndex(self._trips)
+
+
+@dataclass(slots=True, frozen=True)
+class LookupSnapshot:
+    lookup: Lookup
+    version_id: int
 
 
 @dataclass(slots=True, frozen=True)

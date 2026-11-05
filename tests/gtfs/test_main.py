@@ -11,7 +11,7 @@ _LAST_MODIFIED = "Wed, 04 Nov 2026 23:57:17 GMT"
 
 def _patch_state(mocker) -> object:
     repository = mocker.patch("gtfs.main.create_state_repository").return_value
-    repository.load.return_value = ResourceState(etag=_ETAG, last_modified=_LAST_MODIFIED)
+    repository.get.return_value = ResourceState(etag=_ETAG, last_modified=_LAST_MODIFIED)
     return repository
 
 
@@ -27,7 +27,7 @@ def test_when_the_feed_changed_then_run_once_loads_it_and_stores_the_new_state(m
 
     assert gtfs_main.run_once() == 7
     loader.run.assert_called_once_with("feed", _SHA)
-    state.save.assert_called_once_with(ResourceState(_ETAG, _LAST_MODIFIED))
+    state.put.assert_called_once_with(ResourceState(_ETAG, _LAST_MODIFIED))
 
 
 def test_when_the_feed_is_unchanged_then_run_once_returns_none_and_saves_nothing(mocker):
@@ -38,7 +38,7 @@ def test_when_the_feed_is_unchanged_then_run_once_returns_none_and_saves_nothing
 
     assert gtfs_main.run_once() is None
     downloader.download.assert_called_once_with(_ETAG, _LAST_MODIFIED)
-    state.save.assert_not_called()
+    state.put.assert_not_called()
     loader.assert_not_called()
 
 

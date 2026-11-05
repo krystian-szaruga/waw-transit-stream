@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from pyspark.sql import DataFrame, Window
-from pyspark.sql.streaming import StreamingQuery
 import pyspark.sql.functions as F
+from pyspark.sql import DataFrame, Window
+from pyspark.sql.streaming import StreamingQuery, DataStreamWriter
 
-from processing.model import MatchStatus, TripMatchCol, WarsawLiveCol
+from processing.model import MatchStatus, TripMatchCol
 
 
-def start_console_query(matched: DataFrame) -> StreamingQuery:
+def start_console_query(writer: DataStreamWriter) -> StreamingQuery:
     return (
-        matched.writeStream
+        writer
         .foreachBatch(_print_delay_stats)
         .trigger(processingTime="15 seconds")
         .start()
     )
-
 
 def _print_delay_stats(batch_df: DataFrame, _: int) -> None:
     status = F.col(TripMatchCol.MATCH_STATUS.value)

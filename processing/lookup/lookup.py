@@ -7,23 +7,24 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from processing.model import Trip, TripKey, TripGeometry, Lookup, VehicleType, M_PER_DEG
 from core.repository import ReadRepository
+from processing.model import Trip, TripKey, TripGeometry, Lookup, LookupSnapshot, VehicleType, M_PER_DEG
 
 
 class LookupLoader:
     def __init__(self, repository: ReadRepository):
-        self._builder = _LookupBuilder(_TripLoader(repository).read())
+        frame, self._version_id = _TripLoader(repository).read()
+        self._builder = _LookupBuilder(frame)
 
-    def load(self) -> Lookup:
-        return self._builder.build()
+    def load(self) -> LookupSnapshot:
+        return LookupSnapshot(self._builder.build(), self._version_id)
 
 
 class _TripLoader:
     def __init__(self, repository: ReadRepository):
         self._repository = repository
 
-    def read(self) -> pd.DataFrame:
+    def read(self) -> tuple[pd.DataFrame, int]:
         return self._repository.load(self._payload_provider())
 
     @staticmethod

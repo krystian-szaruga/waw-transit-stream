@@ -15,7 +15,7 @@ class SparkSessionContext:
         self,
         app_name: str = "WarsawTransitRealTimeStream",
         packages: str = (
-            "org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0,"
+            "org.apache.spark:spark-sql-kafka-0-10_2.13:4.3.0,"
             "org.postgresql:postgresql:42.7.1"
         ),
         shuffle_partitions: int = 2,

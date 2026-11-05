@@ -11,3 +11,4 @@ setuptools==84.2.1
 pytest==9.2.0
 pytest-cov==7.1.0
 pytest-mock==3.17.0
+numpy==2.5.4

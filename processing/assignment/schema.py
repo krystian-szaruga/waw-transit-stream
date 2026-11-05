@@ -5,6 +5,7 @@ from pyspark.sql.types import (
     DataType,
     DoubleType,
     IntegerType,
+    LongType,
     StringType,
     StructField,
     StructType,
@@ -26,6 +27,7 @@ class Schema:
         TripMatchCol.BRIGADE: StringType(),
         TripMatchCol.LINE: StringType(),
         TripMatchCol.API_TS: TimestampType(),
+        TripMatchCol.GTFS_VERSION: LongType(),
     }
 
     @staticmethod

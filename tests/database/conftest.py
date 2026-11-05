@@ -13,9 +13,17 @@ from database.timetable import writer as writer_module
 
 
 class _ReaderCursor:
-    def __init__(self, csv: str) -> None:
+    def __init__(self, csv: str, version_id: int = 7) -> None:
         self._csv = csv
+        self._version_id = version_id
         self.copy_queries: list[str] = []
+        self.executed: list[str] = []
+
+    def execute(self, query, params=None) -> None:
+        self.executed.append(query.as_string(self))
+
+    def fetchone(self):
+        return (self._version_id,)
 
     def copy_expert(self, query: str, file) -> None:
         self.copy_queries.append(query)
@@ -60,8 +68,8 @@ def _quote_ident_without_connection(monkeypatch):
 
 @pytest.fixture
 def make_reader(monkeypatch):
-    def _make(csv: str, schema: str = "public", table: str = "static_timetable"):
-        cursor = _ReaderCursor(csv)
+    def _make(csv: str, schema: str = "public", table: str = "static_timetable", version_id: int = 7):
+        cursor = _ReaderCursor(csv, version_id)
         monkeypatch.setattr(reader_module, "create_provider", lambda: _FakeProvider(cursor))
         return reader_module.create_timetable_reader(schema, table), cursor
 
