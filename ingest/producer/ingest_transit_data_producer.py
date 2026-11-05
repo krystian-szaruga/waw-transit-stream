@@ -1,7 +1,7 @@
 import orjson
 from confluent_kafka import Producer
 
-from producer.log_kafka_streaming import log_kafka_streaming
+from ingest.producer.log_kafka_streaming import log_kafka_streaming
 from ingest.request import WarsawTransitClient
 
 

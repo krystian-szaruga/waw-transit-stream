@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import signal
 import threading
 import time
 
@@ -10,10 +11,10 @@ from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from console_stats import start_console_query
+from processing.console_stats import start_console_query
 from database import create_timetable_reader, create_version_reader
 from processing.assignment import AssignmentPipeline
-from processing.config import ProcessingConfig
+from processing.config import ProcessingConfig, ProcessingConfigLoader
 from processing.lookup import LookupLoader
 from processing.model import LookupSnapshot
 from processing.session import SparkSessionContext
@@ -27,15 +28,20 @@ class PipelineService:
     _IDLE_POLL_SEC = 0.2
     _IDLE_TIMEOUT_SEC = 60.0
 
-    def __init__(self, config: ProcessingConfig) -> None:
-        self._config = config
+    def __init__(self) -> None:
+        self._config: ProcessingConfig = ProcessingConfigLoader().load()
         self._stop = threading.Event()
 
     def stop(self) -> None:
         logger.info("Received termination request. Initiating graceful shutdown.")
         self._stop.set()
 
+    def _register_system_signals(self) -> None:
+        signal.signal(signal.SIGINT, lambda *_: self.stop())
+        signal.signal(signal.SIGTERM, lambda *_: self.stop())
+
     def run(self) -> None:
+        self._register_system_signals()
         logger.info("Loading timetable lookup...")
         snapshot = LookupLoader(create_timetable_reader()).load()
         versions = create_version_reader()

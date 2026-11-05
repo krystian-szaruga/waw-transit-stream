@@ -5,8 +5,8 @@ from typing import List
 from confluent_kafka import Producer
 
 from ingest.config import IngestAppConfig
-from pipeline.log_pipeline_cycle import log_pipeline_cycle
-from producer import IngestTransitDataProducer
+from ingest.pipeline.log_pipeline_cycle import log_pipeline_cycle
+from ingest.producer import IngestTransitDataProducer
 
 logger = logging.getLogger(__name__)
 
