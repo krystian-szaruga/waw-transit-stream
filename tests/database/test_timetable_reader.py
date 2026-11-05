@@ -19,16 +19,24 @@ _COLUMNS = [
 def test_when_copy_returns_rows_then_load_returns_all_of_them(make_reader, timetable_csv):
     reader, _ = make_reader(timetable_csv)
 
-    frame = reader.load([date(2026, 11, 4), date(2026, 11, 5)])
+    frame, _ = reader.load([date(2026, 11, 4), date(2026, 11, 5)])
 
     assert frame["trip_id"].tolist() == ["t1", "t1", "t2"]
     assert frame["stop_sequence"].tolist() == [1, 2, 1]
 
 
+def test_when_the_active_version_is_known_then_load_returns_it_with_the_rows(make_reader, timetable_csv):
+    reader, _ = make_reader(timetable_csv, version_id=11)
+
+    _, version_id = reader.load([date(2026, 11, 4)])
+
+    assert version_id == 11
+
+
 def test_when_copy_returns_rows_then_service_date_is_a_real_date(make_reader, timetable_csv):
     reader, _ = make_reader(timetable_csv)
 
-    frame = reader.load([date(2026, 11, 4)])
+    frame, _ = reader.load([date(2026, 11, 4)])
 
     assert frame["service_date"].tolist() == [date(2026, 11, 4), date(2026, 11, 4), date(2026, 11, 5)]
 
@@ -36,7 +44,7 @@ def test_when_copy_returns_rows_then_service_date_is_a_real_date(make_reader, ti
 def test_when_copy_returns_rows_then_dtypes_follow_the_timetable_contract(make_reader, timetable_csv):
     reader, _ = make_reader(timetable_csv)
 
-    frame = reader.load([date(2026, 11, 4)])
+    frame, _ = reader.load([date(2026, 11, 4)])
 
     assert frame["vehicle_type"].dtype == "int16"
     assert frame["line"].dtype == "string"
@@ -48,17 +56,14 @@ def test_when_copy_returns_rows_then_dtypes_follow_the_timetable_contract(make_r
     assert frame["scheduled_arrival_offset"].dtype == "int32"
 
 
-def test_when_loading_dates_then_copy_query_filters_exactly_those_days(make_reader, timetable_csv):
-    reader, cursor = make_reader(timetable_csv)
+def test_when_loading_dates_then_copy_query_filters_the_active_version_and_those_days(make_reader, timetable_csv):
+    reader, cursor = make_reader(timetable_csv, version_id=11)
 
     reader.load([date(2026, 11, 4), date(2026, 11, 5)])
 
     query = cursor.copy_queries[0]
     assert "service_date = ANY(ARRAY['2026-11-04', '2026-11-05']::date[])" in query
-    assert (
-        "gtfs_version = (SELECT version_id FROM public.gtfs_versions WHERE status = 'active')"
-        in query
-    )
+    assert "gtfs_version = '11'" in query
     assert "ORDER BY service_date, trip_id, stop_sequence" in query
 
 
@@ -72,14 +77,14 @@ def test_when_reader_targets_another_table_then_copy_query_uses_it(make_reader, 
     reader.load([date(2026, 11, 4)])
 
     assert "FROM gtfs.static_timetable_archive" in cursor.copy_queries[0]
-    assert "SELECT version_id FROM gtfs.gtfs_versions" in cursor.copy_queries[0]
+    assert "SELECT version_id FROM gtfs.gtfs_versions" in cursor.executed[0]
 
 
 def test_when_copy_returns_only_a_header_then_load_returns_empty_frame(make_reader):
     header = ",".join(_COLUMNS) + "\n"
     reader, _ = make_reader(header)
 
-    frame = reader.load([date(2026, 11, 4)])
+    frame, _ = reader.load([date(2026, 11, 4)])
 
     assert frame.empty
     assert list(frame.columns) == _COLUMNS

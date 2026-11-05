@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 def run_once() -> int | None:
     state = create_state_repository()
-    cached = state.load()
+    cached = state.get()
     downloaded = WarsawGtfsDownloader().download(cached.etag, cached.last_modified)
     if downloaded is None:
         return None
     version_id = TimetableLoader(create_timetable_writer()).run(
         GtfsFeed.from_zip(downloaded.content), downloaded.sha256
     )
-    state.save(ResourceState(downloaded.etag, downloaded.last_modified))
+    state.put(ResourceState(downloaded.etag, downloaded.last_modified))
     return version_id
 
 

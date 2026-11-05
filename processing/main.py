@@ -3,8 +3,8 @@ import signal
 import sys
 import warnings
 
-from application import Application
-from config import ProcessingConfig, ProcessingConfigLoader
+from processing.pipeline_service import PipelineService
+from processing.config import ProcessingConfig, ProcessingConfigLoader
 
 
 def _main() -> None:
@@ -12,11 +12,10 @@ def _main() -> None:
     logger = logging.getLogger("warsaw_transit_stream_processing")
     logger.info("Loading configuration...")
     config: ProcessingConfig = ProcessingConfigLoader().load()
-
-    application = Application(config)
-    signal.signal(signal.SIGINT, lambda *_: application.stop())
-    signal.signal(signal.SIGTERM, lambda *_: application.stop())
-    application.run()
+    service = PipelineService(config)
+    signal.signal(signal.SIGINT, lambda *_: service.stop())
+    signal.signal(signal.SIGTERM, lambda *_: service.stop())
+    service.run()
 
 
 def _setup_logging() -> None:

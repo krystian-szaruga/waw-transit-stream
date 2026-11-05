@@ -3,7 +3,7 @@ from typing import override
 
 from core import ConfigLoader
 from processing.model import VehicleType
-from config.config import ProcessingConfig, KafkaConfig, DatabaseConfig
+from processing.config.config import ProcessingConfig, KafkaConfig, DatabaseConfig
 
 
 class ProcessingConfigLoader(ConfigLoader[ProcessingConfig]):

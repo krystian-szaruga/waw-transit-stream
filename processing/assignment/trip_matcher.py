@@ -12,13 +12,13 @@ from processing.assignment.records import Anchor, Match, MatchState, Trip, Vehic
 
 
 class TripMatcher:
-    def __init__(self, lookup: Lookup) -> None:
+    def __init__(self, lookup: Lookup, version_id: int) -> None:
         self._lookup = lookup
         self._config = _Config()
         self._direction = _Direction(self._config)
         self._candidates = _CandidateFinder(lookup, self._config)
         self._choice = _Choice(self._candidates, self._config)
-        self._rows = _Rows(self._config)
+        self._rows = _Rows(self._config, version_id)
 
     def match_rows(
             self,
@@ -251,19 +251,21 @@ class _Choice:
 
 
 class _Rows:
-    def __init__(self, config: _Config) -> None:
+    def __init__(self, config: _Config, version_id: int) -> None:
         self._config = config
+        self._version_id = version_id
 
     def row(self, match: Match | None, ping: _LivePing) -> tuple:
         if match is None:
             return (
                 int(ping.vehicle_type), ping.vehicle_number, ping.brigade, ping.line,
-                None, None, None, None, MatchStatus.UNMATCHED, ping.ts,
+                None, None, None, None, MatchStatus.UNMATCHED, ping.ts, self._version_id,
             )
         status = MatchStatus.LAYOVER if self._is_layover(match) else MatchStatus.MATCHED
         return (
             int(ping.vehicle_type), ping.vehicle_number, ping.brigade, ping.line,
             match.trip.trip_id, match.dist_m, match.delay_sec, match.cost, status, ping.ts,
+            self._version_id,
         )
 
     def frame(self, pdf: pd.DataFrame, pings: list[_LivePing], matches: list[Match | None]) -> pd.DataFrame:
@@ -292,6 +294,7 @@ class _Rows:
         matched[TripMatchCol.VEHICLE_NUMBER] = pdf[WarsawLiveCol.VEHICLE_NUMBER]
         matched[TripMatchCol.BRIGADE] = pdf[WarsawLiveCol.BRIGADE]
         matched[TripMatchCol.LINE] = pdf[WarsawLiveCol.LINE]
+        matched[TripMatchCol.GTFS_VERSION] = self._version_id
         matched[TripMatchCol.TRIP_ID] = matched[TripMatchCol.TRIP_ID].astype("string")
         for column in (TripMatchCol.DIST_M, TripMatchCol.DELAY_SEC, TripMatchCol.COST):
             matched[column] = matched[column].astype("float64")

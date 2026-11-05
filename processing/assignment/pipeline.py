@@ -9,7 +9,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 import pyspark.sql.functions as F
 
-from processing.model import Lookup, MatchStatus, TripMatchCol, WarsawLiveCol
+from processing.model import Lookup, LookupSnapshot, MatchStatus, TripMatchCol, WarsawLiveCol
 from processing.assignment.ownership import TripOwnership
 from processing.assignment.records import OwnershipRules, TripBounds, TripId
 from processing.assignment.schema import Schema
@@ -21,7 +21,7 @@ from processing.assignment.vehicle_matching import VehicleMatching
 class AssignmentPipeline:
     _FRESH_WINDOW = "current_timestamp() - INTERVAL 3 MINUTES"
 
-    def __init__(self, lookup_bc: Broadcast[Lookup]) -> None:
+    def __init__(self, lookup_bc: Broadcast[LookupSnapshot]) -> None:
         self._lookup_bc = lookup_bc
 
     def build(self, live: DataFrame) -> DataFrame:
@@ -52,7 +52,7 @@ class _Batch:
     _RULES = OwnershipRules(switch_margin=300.0, ttl_sec=300.0, max_start_delay_sec=900)
     _LOOKUP_CACHE: dict[int, _LookupData] = {}
 
-    def __init__(self, lookup_bc: Broadcast[Lookup], key: tuple[int, str], batches: Iterator[pd.DataFrame], state: GroupState) -> None:
+    def __init__(self, lookup_bc: Broadcast[LookupSnapshot], key: tuple[int, str], batches: Iterator[pd.DataFrame], state: GroupState) -> None:
         self._lookup_bc = lookup_bc
         self._key = key
         self._batches = batches
@@ -102,10 +102,11 @@ class _Batch:
         return iter([frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)])
 
     def _lookup_data(self) -> _LookupData:
-        lookup = self._lookup_bc.value
+        snapshot = self._lookup_bc.value
+        lookup = snapshot.lookup
         cached = self._LOOKUP_CACHE.get(id(lookup))
         if cached is None:
-            cached = _LookupData(TripMatcher(lookup), self._trip_bounds(lookup))
+            cached = _LookupData(TripMatcher(lookup, snapshot.version_id), self._trip_bounds(lookup))
             self._LOOKUP_CACHE.clear()
             self._LOOKUP_CACHE[id(lookup)] = cached
         return cached
