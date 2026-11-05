@@ -3,17 +3,17 @@ from __future__ import annotations
 import logging
 import threading
 
+from py4j.protocol import Py4JJavaError
 from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.streaming import StreamingQuery
+from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from processing.assignment import AssignmentPipeline
-from processing.console_stats import start_console_query
-from processing.model import Lookup
 from config import ProcessingConfig
 from database import create_timetable_reader
-from processing.debug_dump import start_dump
+from processing.assignment import AssignmentPipeline
+from processing.console_stats import start_console_query
 from processing.lookup import LookupLoader
+from processing.model import Lookup
 from processing.session import SparkSessionContext
 from processing.source import LiveReader
 
@@ -37,24 +37,32 @@ class Application:
                 return
             broadcast = spark.sparkContext.broadcast(lookup)
             matched = self._matched(spark, broadcast)
-            dump: StreamingQuery | None = start_dump(matched, lookup)
             console: StreamingQuery = start_console_query(matched)
-            self._await(console, dump)
+            self._await(console)
             broadcast.destroy()
 
     def _matched(self, spark: SparkSession, lookup_bc: Broadcast[Lookup]) -> DataFrame:
         live: DataFrame = LiveReader(spark, self._config.kafka).read()
         return AssignmentPipeline(lookup_bc).build(live)
 
-    def _await(self, console: StreamingQuery, dump: StreamingQuery | None) -> None:
+    def _await(self, console: StreamingQuery) -> None:
         try:
             while console.isActive and not self._stop.is_set():
                 self._stop.wait(timeout=2.0)
         except KeyboardInterrupt:
             self._stop.set()
 
-        if dump is not None and dump.isActive:
-            dump.stop()
+        self._drain(console)
+
         if console.isActive:
             console.stop()
         console.awaitTermination()
+
+    @staticmethod
+    def _drain(console: StreamingQuery) -> None:
+        if not console.isActive:
+            return
+        try:
+            console.processAllAvailable()
+        except (StreamingQueryException, Py4JJavaError):
+            logger.exception("Failed to drain streaming query before stopping")

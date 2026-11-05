@@ -1,3 +1,3 @@
-from .request import WarsawGtfsDownloader
+from .request import GtfsDownload, WarsawGtfsDownloader
 
-__all__ = ["WarsawGtfsDownloader"]
+__all__ = ["GtfsDownload", "WarsawGtfsDownloader"]

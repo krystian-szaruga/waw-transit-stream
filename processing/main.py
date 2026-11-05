@@ -1,6 +1,7 @@
 import logging
 import signal
 import sys
+import warnings
 
 from application import Application
 from config import ProcessingConfig, ProcessingConfigLoader
@@ -19,6 +20,11 @@ def _main() -> None:
 
 
 def _setup_logging() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated",
+        category=FutureWarning,
+    )
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',

@@ -23,16 +23,20 @@ class _ReaderCursor:
 
 
 class _WriterCursor:
-    def __init__(self, rowcount: int) -> None:
+    def __init__(self, rowcount: int = 0, rows: tuple = ()) -> None:
         self.rowcount = rowcount
         self.events: list[tuple[str, str]] = []
         self.executed: list[tuple[str, object]] = []
         self.copies: list[str] = []
+        self._rows = list(rows)
 
     def execute(self, query, params=None) -> None:
         text = query.as_string(self)
         self.executed.append((text, params))
         self.events.append(("execute", text))
+
+    def fetchone(self):
+        return self._rows.pop(0)
 
     def copy_expert(self, query: str, file) -> None:
         self.events.append(("copy", query))
@@ -68,12 +72,14 @@ def make_reader(monkeypatch):
 def make_writer(monkeypatch):
     def _make(
         rowcount: int = 0,
+        rows: tuple = (),
         schema: str = "public",
         table: str = "static_timetable",
+        versions_table: str = "gtfs_versions",
     ):
-        cursor = _WriterCursor(rowcount)
+        cursor = _WriterCursor(rowcount, rows)
         monkeypatch.setattr(writer_module, "create_provider", lambda: _FakeProvider(cursor))
-        return writer_module.create_timetable_writer(schema, table), cursor
+        return writer_module.create_timetable_writer(schema, table, versions_table), cursor
 
     return _make
 

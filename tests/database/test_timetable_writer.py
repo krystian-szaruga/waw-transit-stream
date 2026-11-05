@@ -1,55 +1,65 @@
-from datetime import date
+from core import Payload
 
 _COPY_COLUMNS = (
-    "service_date, vehicle_type, line, brigade, route_id, trip_id, stop_id, stop_name, "
-    "stop_sequence, stop_lat, stop_lon, scheduled_arrival_offset"
+    "gtfs_version, service_date, vehicle_type, line, brigade, route_id, trip_id, stop_id, "
+    "stop_name, stop_sequence, stop_lat, stop_lon, scheduled_arrival_offset"
 )
+_SHA = "a" * 64
+
+
+def _save(writer, frame) -> int:
+    return writer.save(Payload(frame, _SHA))
 
 
 def _executed(cursor) -> list[str]:
     return [text for kind, text in cursor.events if kind == "execute"]
 
 
-def test_when_copy_reports_rows_then_save_returns_that_count(make_writer, timetable_frame):
-    writer, _ = make_writer(rowcount=3)
+def test_when_sha_is_new_then_save_returns_the_inserted_version(make_writer, timetable_frame):
+    writer, _ = make_writer(rows=(None, (7,)))
 
-    assert writer.save(timetable_frame) == 3
-
-
-def test_when_frame_spans_two_days_then_save_deletes_those_days_and_older(make_writer, timetable_frame):
-    writer, cursor = make_writer()
-
-    writer.save(timetable_frame)
-
-    delete_sql = _executed(cursor)[0]
-    assert "DELETE FROM public.static_timetable" in delete_sql
-    assert "service_date = ANY(%s) OR service_date < %s" in delete_sql
+    assert _save(writer, timetable_frame) == 7
 
 
-def test_when_frame_has_repeated_days_then_delete_uses_unique_sorted_dates(make_writer, timetable_frame):
-    writer, cursor = make_writer()
+def test_when_sha_is_known_then_save_returns_it_without_loading_anything(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=((7,),))
 
-    writer.save(timetable_frame)
+    assert _save(writer, timetable_frame) == 7
+    assert cursor.copies == []
+    assert len(_executed(cursor)) == 1
 
-    _, params = cursor.executed[0]
-    assert params == ([date(2026, 11, 4), date(2026, 11, 5)], date(2026, 11, 4))
+
+def test_when_sha_is_new_then_the_version_row_is_inserted_with_that_sha(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)))
+
+    _save(writer, timetable_frame)
+
+    statement, params = cursor.executed[1]
+    assert statement == (
+        "INSERT INTO public.gtfs_versions (sha256) VALUES (%s) RETURNING version_id"
+    )
+    assert params == (_SHA,)
 
 
-def test_when_saving_then_copied_csv_has_no_header_and_iso_dates(make_writer, timetable_frame):
-    writer, cursor = make_writer()
+def test_when_saving_then_copied_csv_carries_the_version_and_iso_dates(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)))
 
-    writer.save(timetable_frame)
+    _save(writer, timetable_frame)
 
     lines = cursor.copies[0].strip().splitlines()
     assert len(lines) == 3
-    assert not lines[0].startswith("service_date")
-    assert [line.split(",")[0] for line in lines] == ["2026-11-05", "2026-11-04", "2026-11-04"]
+    assert not lines[0].startswith("gtfs_version")
+    assert [line.split(",")[:2] for line in lines] == [
+        ["7", "2026-11-05"],
+        ["7", "2026-11-04"],
+        ["7", "2026-11-04"],
+    ]
 
 
-def test_when_saving_then_copy_targets_the_table_with_frame_columns_in_order(make_writer, timetable_frame):
-    writer, cursor = make_writer()
+def test_when_saving_then_copy_targets_the_table_with_the_version_column_first(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)))
 
-    writer.save(timetable_frame)
+    _save(writer, timetable_frame)
 
     copy_sql = next(text for kind, text in cursor.events if kind == "copy")
     assert copy_sql == (
@@ -57,46 +67,56 @@ def test_when_saving_then_copy_targets_the_table_with_frame_columns_in_order(mak
     )
 
 
-def test_when_saving_then_primary_key_and_matching_index_are_recreated(make_writer, timetable_frame):
-    writer, cursor = make_writer()
+def test_when_saving_then_the_previous_active_version_is_retired_before_the_new_one_activates(
+    make_writer, timetable_frame
+):
+    writer, cursor = make_writer(rows=(None, (7,)))
 
-    writer.save(timetable_frame)
+    _save(writer, timetable_frame)
 
     statements = _executed(cursor)
-    assert (
-        "ALTER TABLE public.static_timetable ADD PRIMARY KEY "
-        "(service_date, trip_id, stop_sequence)"
-    ) in statements
-    assert (
-        "CREATE INDEX idx_timetable_matching ON public.static_timetable "
-        "(service_date, vehicle_type, line, brigade)"
-    ) in statements
+    retire_at = next(
+        i for i, text in enumerate(statements)
+        if text == "UPDATE public.gtfs_versions SET status = 'retired' WHERE status = 'active'"
+    )
+    activate_at = next(
+        i for i, text in enumerate(statements)
+        if text == "UPDATE public.gtfs_versions SET status = 'active' WHERE version_id = %s"
+    )
+    assert retire_at < activate_at
 
 
-def test_when_saving_then_indexes_are_dropped_before_copy_and_recreated_after(make_writer, timetable_frame):
-    writer, cursor = make_writer()
+def test_when_saving_then_rows_of_pruned_versions_are_deleted_before_the_versions(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)))
 
-    writer.save(timetable_frame)
+    _save(writer, timetable_frame)
 
-    kinds = [kind for kind, _ in cursor.events]
-    copy_at = kinds.index("copy")
-    drop_index_at = next(i for i, (_, text) in enumerate(cursor.events) if text.startswith("DROP INDEX IF EXISTS"))
-    drop_pk_at = next(i for i, (_, text) in enumerate(cursor.events) if "DROP CONSTRAINT IF EXISTS" in text)
-    add_pk_at = next(i for i, (_, text) in enumerate(cursor.events) if "ADD PRIMARY KEY" in text)
-    create_index_at = next(i for i, (_, text) in enumerate(cursor.events) if text.startswith("CREATE INDEX"))
-    assert drop_index_at < copy_at
-    assert drop_pk_at < copy_at
-    assert add_pk_at > copy_at
-    assert create_index_at > copy_at
+    statements = _executed(cursor)
+    rows_at = next(i for i, text in enumerate(statements)
+                   if text.startswith("DELETE FROM public.static_timetable"))
+    versions_at = next(i for i, text in enumerate(statements)
+                       if text.startswith("DELETE FROM public.gtfs_versions"))
+    assert rows_at < versions_at
 
 
-def test_when_writer_targets_another_table_then_statements_use_custom_schema_and_table(make_writer, timetable_frame):
-    writer, cursor = make_writer(schema="archive", table="static_timetable_2026")
+def test_when_saving_then_active_and_three_newest_retired_versions_are_kept(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)))
 
-    writer.save(timetable_frame)
+    _save(writer, timetable_frame)
+
+    prune = next(text for text in _executed(cursor)
+                 if text.startswith("DELETE FROM public.gtfs_versions"))
+    assert "status = 'active'" in prune
+    assert "status = 'retired' ORDER BY loaded_at DESC LIMIT %s" in prune
+    assert cursor.executed[-1][1] == (3,)
+
+
+def test_when_writer_targets_another_schema_then_statements_use_it(make_writer, timetable_frame):
+    writer, cursor = make_writer(rows=(None, (7,)), schema="archive", table="static_timetable_2026")
+
+    _save(writer, timetable_frame)
 
     statements = [text for _, text in cursor.events]
     assert all("public." not in text for text in statements)
-    assert all("archive." in text for text in statements)
     assert any("archive.static_timetable_2026" in text for text in statements)
-    assert any("archive.idx_timetable_matching" in text for text in statements)
+    assert any("archive.gtfs_versions" in text for text in statements)
