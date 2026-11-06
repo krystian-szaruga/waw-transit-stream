@@ -28,9 +28,4 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run tests
-        env:
-          KAFKA_TOPIC_BUSES: buses
-          KAFKA_TOPIC_TRAMS: trams
-          DB_USER: test
-          DB_PASSWORD: test
         run: python -m pytest -q

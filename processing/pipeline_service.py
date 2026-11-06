@@ -4,6 +4,7 @@ import logging
 import signal
 import threading
 import time
+from dataclasses import dataclass
 
 import psycopg2
 from py4j.protocol import Py4JJavaError
@@ -11,13 +12,14 @@ from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from processing.console_stats import start_console_query
 from database import create_timetable_reader, create_version_reader
 from processing.assignment import AssignmentPipeline
 from processing.config import ProcessingConfig, ProcessingConfigLoader
+from processing.console_stats import console_stats
 from processing.lookup import LookupLoader
 from processing.model import LookupSnapshot
-from processing.session import SparkSessionContext
+from processing.session import RedisSession, SparkSessionContext
+from processing.sink import RedisSink
 from processing.source import LiveReader
 
 logger = logging.getLogger("warsaw_transit_stream_processing")
@@ -46,24 +48,44 @@ class PipelineService:
         snapshot = LookupLoader(create_timetable_reader()).load()
         versions = create_version_reader()
         logger.info("Loaded timetable version %d", snapshot.version_id)
-        with SparkSessionContext() as spark:
-            if spark is None:
-                logger.critical("Failed to acquire an active SparkSession. Exiting.")
-                return
-            while not self._stop.is_set():
-                broadcast = spark.sparkContext.broadcast(snapshot)
-                console: StreamingQuery = start_console_query(
-                    self._matched(spark, broadcast)
-                    .writeStream
-                    .option("checkpointLocation", self._config.checkpoint_location)
-                )
-                changed = self._await(console, versions, snapshot.version_id)
-                self._stop_when_idle(console)
-                broadcast.destroy()
-                if changed and not self._stop.is_set():
-                    snapshot = self._reload(snapshot)
-                    continue
-                return
+        with RedisSession(self._config.redis) as session:
+            with SparkSessionContext(self._config.timezone).open() as spark:
+                gen = self._prepare(spark, session, snapshot)
+                while not self._stop.is_set():
+                    console = self._start(spark, gen)
+                    changed = self._await(console, versions, gen.snapshot.version_id)
+                    next_gen: _VersionContext | None = None
+                    if changed and not self._stop.is_set():
+                        next_gen = self._prepare_next(spark, session, gen.snapshot)
+                    self._stop_when_idle(console)
+                    gen.broadcast.destroy()
+                    if next_gen is None:
+                        return
+                    if self._stop.is_set():
+                        next_gen.broadcast.destroy()
+                        return
+                    gen = next_gen
+                gen.broadcast.destroy()
+
+    def _prepare(self, spark: SparkSession, session: RedisSession, snapshot: LookupSnapshot) -> _VersionContext:
+        sink = RedisSink(session, snapshot.lookup, self._config.timezone)
+        broadcast = spark.sparkContext.broadcast(snapshot)
+        return _VersionContext(snapshot, sink, broadcast)
+
+    def _prepare_next(self, spark: SparkSession, session: RedisSession, current: LookupSnapshot) -> _VersionContext | None:
+        new_snapshot = self._reload(current)
+        if new_snapshot is current: return None
+        return self._prepare(spark, session, new_snapshot)
+
+    def _start(self, spark: SparkSession, gen: _VersionContext) -> StreamingQuery:
+        return (
+            self._matched(spark, gen.broadcast)
+            .writeStream
+            .option("checkpointLocation", self._config.checkpoint_location)
+            .trigger(processingTime="15 seconds")
+            .foreachBatch(_BatchHandler(gen.sink))
+            .start()
+        )
 
     def _reload(self, current: LookupSnapshot) -> LookupSnapshot:
         while not self._stop.is_set():
@@ -117,3 +139,19 @@ class PipelineService:
             console.awaitTermination()
         except (StreamingQueryException, Py4JJavaError):
             logger.exception("Streaming query terminated with an error while stopping")
+
+
+@dataclass
+class _VersionContext:
+    snapshot: LookupSnapshot
+    sink: RedisSink
+    broadcast: Broadcast[LookupSnapshot]
+
+
+class _BatchHandler:
+    def __init__(self, sink: RedisSink) -> None:
+        self._sink = sink
+
+    def __call__(self, batch_df: DataFrame, batch_id: int) -> None:
+        console_stats(batch_df, batch_id)
+        self._sink.write(batch_df)

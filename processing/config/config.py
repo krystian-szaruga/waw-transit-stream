@@ -22,9 +22,19 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class RedisConfig:
+    host: str = "127.0.0.1"
+    port: int = 6379
+    password: str = ""
+    db: int = 0
+
+
+@dataclass(frozen=True)
 class ProcessingConfig:
     kafka: KafkaConfig
     db: DatabaseConfig
+    redis: RedisConfig
     checkpoint_location: str
     max_event_age_minutes: int = 10
     write_partitions: int = 2
+    timezone: str = "Europe/Warsaw"
