@@ -42,3 +42,4 @@ infra/postgres_data/
 logs/
 docs/*
 checkpoints/
+podman-tests.sh
