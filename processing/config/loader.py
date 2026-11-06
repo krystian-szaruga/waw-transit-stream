@@ -14,22 +14,22 @@ class ProcessingConfigLoader(ConfigLoader[ProcessingConfig]):
             kafka=KafkaConfig(
                 bootstrap_servers=self._env_reader.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
                 topics={
-                    VehicleType.BUS: self._env_reader.require("KAFKA_TOPIC_BUSES"),
-                    VehicleType.TRAM: self._env_reader.require("KAFKA_TOPIC_TRAMS"),
+                    VehicleType.BUS: self._env_reader.get("KAFKA_TOPIC_BUSES", "buses"),
+                    VehicleType.TRAM: self._env_reader.get("KAFKA_TOPIC_TRAMS", "trams"),
                 },
                 starting_offsets=self._env_reader.get("KAFKA_STARTING_OFFSETS", "earliest")
             ),
             db=DatabaseConfig(
                 db_host=self._env_reader.get("DB_HOST", "127.0.0.1"),
                 db_port=self._env_reader.get_int("DB_PORT", 5432),
-                db_user=self._env_reader.require("DB_USER"),
-                db_password=self._env_reader.require("DB_PASSWORD"),
+                db_user=self._env_reader.get("DB_USER", "user"),
+                db_password=self._env_reader.get("DB_PASSWORD", "password"),
                 db_name=self._env_reader.get("DB_NAME", "warsaw_transit")
             ),
             redis=RedisConfig(
                 host=self._env_reader.get("REDIS_HOST", "127.0.0.1"),
                 port=self._env_reader.get_int("REDIS_PORT", 6379),
-                password=self._env_reader.require("REDIS_PASSWORD"),
+                password=self._env_reader.get("REDIS_PASSWORD", ""),
                 db=self._env_reader.get_int("REDIS_DB", 0)
             ),
             checkpoint_location=self._env_reader.get("SPARK_CHECKPOINT_LOCATION", "./checkpoints/transit_stream"),
