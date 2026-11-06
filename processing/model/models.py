@@ -31,6 +31,9 @@ class TripMatchCol(StrEnum):
     MATCH_STATUS = "match_status"
     API_TS = "api_timestamp"
     GTFS_VERSION = "gtfs_version"
+    LON = "lon"
+    LAT = "lat"
+    NEXT_STOP_SEQUENCE = "next_stop_sequence"
 
 
 class WarsawLiveCol(StrEnum):

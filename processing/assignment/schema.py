@@ -28,6 +28,9 @@ class Schema:
         TripMatchCol.LINE: StringType(),
         TripMatchCol.API_TS: TimestampType(),
         TripMatchCol.GTFS_VERSION: LongType(),
+        TripMatchCol.LON: DoubleType(),
+        TripMatchCol.LAT: DoubleType(),
+        TripMatchCol.NEXT_STOP_SEQUENCE: LongType(),
     }
 
     @staticmethod

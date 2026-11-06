@@ -3,7 +3,7 @@ from typing import override
 
 from core import ConfigLoader
 from processing.model import VehicleType
-from processing.config.config import ProcessingConfig, KafkaConfig, DatabaseConfig
+from processing.config.config import ProcessingConfig, KafkaConfig, DatabaseConfig, RedisConfig
 
 
 class ProcessingConfigLoader(ConfigLoader[ProcessingConfig]):
@@ -26,7 +26,14 @@ class ProcessingConfigLoader(ConfigLoader[ProcessingConfig]):
                 db_password=self._env_reader.require("DB_PASSWORD"),
                 db_name=self._env_reader.get("DB_NAME", "warsaw_transit")
             ),
-            checkpoint_location=self._env_reader.get("SPARK_CHECKPOINT_LOCATION", "./checkpoints/transit_stream")
+            redis=RedisConfig(
+                host=self._env_reader.get("REDIS_HOST", "127.0.0.1"),
+                port=self._env_reader.get_int("REDIS_PORT", 6379),
+                password=self._env_reader.require("REDIS_PASSWORD"),
+                db=self._env_reader.get_int("REDIS_DB", 0)
+            ),
+            checkpoint_location=self._env_reader.get("SPARK_CHECKPOINT_LOCATION", "./checkpoints/transit_stream"),
+            timezone=self._env_reader.get("TIMEZONE", "Europe/Warsaw")
         )
 
 

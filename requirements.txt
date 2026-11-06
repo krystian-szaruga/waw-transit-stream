@@ -7,8 +7,10 @@ orjson==3.13.0
 pyspark==4.3.0
 pyarrow==26.0.1
 psycopg2-binary==2.9.13
+redis==8.1.0
 setuptools==84.2.1
 pytest==9.2.0
 pytest-cov==7.1.0
 pytest-mock==3.17.0
 numpy==2.5.4
+booktype==1.5

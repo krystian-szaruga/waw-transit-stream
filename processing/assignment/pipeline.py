@@ -120,10 +120,10 @@ class _Batch:
             if midnight is None:
                 midnight = pd.Timestamp(trip.key.service_date)
                 days[trip.key.service_date] = midnight
-                bounds[TripId(trip.trip_id)] = TripBounds(
-                    midnight + pd.Timedelta(seconds=int(trip.start)),
-                    midnight + pd.Timedelta(seconds=int(trip.end)),
-                )
+            bounds[TripId(trip.trip_id)] = TripBounds(
+                midnight + pd.Timedelta(seconds=int(trip.start)),
+                midnight + pd.Timedelta(seconds=int(trip.end)),
+            )
         return bounds
 
 
