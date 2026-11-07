@@ -3,9 +3,7 @@ import time
 from contextlib import contextmanager
 from typing import Iterator
 
-from waw_transit.core import ResourceState
-from waw_transit.database import create_timetable_writer
-from waw_transit.database.postgres.repository.feed_state import create_state_repository
+from waw_transit.core import ResourceState, ResourceStateRepository
 from waw_transit_pipeline.gtfs.loader import TimetableLoader
 from waw_transit_pipeline.gtfs.loader.builder import GtfsFeed
 from waw_transit_pipeline.gtfs.request import WarsawGtfsDownloader
@@ -14,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class TimetableSync:
-    def __init__(self, interval: int = 1800) -> None:
+    def __init__(self, loader: TimetableLoader, state: ResourceStateRepository, interval: int = 1800) -> None:
+        self._loader = loader
+        self._state = state
         self._interval = interval
 
     def run(self) -> None:
@@ -27,17 +27,15 @@ class TimetableSync:
             self.run()
             time.sleep(self._interval)
 
-    @staticmethod
-    def _run_once() -> int | None:
-        state = create_state_repository()
-        cached = state.get()
+    def _run_once(self) -> int | None:
+        cached = self._state.get()
         downloaded = WarsawGtfsDownloader().download(cached.etag, cached.last_modified)
         if downloaded is None:
             return None
-        version_id = TimetableLoader(create_timetable_writer()).run(
+        version_id = self._loader.run(
             GtfsFeed.from_zip(downloaded.content), downloaded.sha256
         )
-        state.put(ResourceState(downloaded.etag, downloaded.last_modified))
+        self._state.put(ResourceState(downloaded.etag, downloaded.last_modified))
         return version_id
 
     @staticmethod
@@ -46,7 +44,6 @@ class TimetableSync:
             logger.info("Feed unchanged")
         else:
             logger.info("Timetable version %d active", version_id)
-
 
 
 @contextmanager

@@ -3,12 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from waw_transit.core.models import ResourceState
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.repository.repository import Repository
 
 
-class ResourceStateRepository[Resource](ABC):
-    def __init__(self, provider: Provider[Resource]) -> None:
-        self._provider = provider
+class ResourceStateRepository(ABC):
 
     @abstractmethod
     def get(self) -> ResourceState:
@@ -17,3 +15,9 @@ class ResourceStateRepository[Resource](ABC):
     @abstractmethod
     def put(self, state: ResourceState) -> None:
         pass
+
+
+class ProviderResourceStateRepository[Resource](
+    Repository[Resource], ResourceStateRepository, ABC
+):
+    pass

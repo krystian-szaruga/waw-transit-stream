@@ -10,7 +10,8 @@ from confluent_kafka import Producer
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
 from waw_transit_pipeline.processing.model import VehicleType, WarsawLiveCol, LookupSnapshot
 from waw_transit.database.redis import RedisSession
-from waw_transit_pipeline.processing.sink import RedisSink
+from waw_transit.database.redis.live_state_repository import RedisLiveStateRepository
+from waw_transit_pipeline.processing.sink import LiveStatePreparer
 from waw_transit_pipeline.processing.source import LiveReader
 
 _TIMEZONE = "Europe/Warsaw"
@@ -74,13 +75,16 @@ def test_when_a_ping_arrives_on_kafka_then_it_reaches_redis(
     live = LiveReader(spark, redpanda).read()
     matched = AssignmentPipeline(broadcast).build(live)
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
 
-        sink = RedisSink(session, lookup, _TIMEZONE)
+        repository = RedisLiveStateRepository(session, _TIMEZONE)
+        preparer = LiveStatePreparer(lookup, _TIMEZONE)
         query = (
-            matched.writeStream.foreachBatch(lambda batch, _: sink.write(batch))
+            matched.writeStream.foreachBatch(
+                lambda batch, _: repository.save(preparer.prepare(batch))
+            )
             .option("checkpointLocation", str(tmp_path / "checkpoints"))
             .trigger(availableNow=True)
             .start()

@@ -18,11 +18,11 @@ class Supervisor:
     _RESTART_LIMIT = 5
     _RESTART_WINDOW_SEC = 60.0
     _SHUTDOWN_TIMEOUT_SEC = 30.0
-    _BOOTSTRAP = ServiceSpec("gtfs-once", ("-m", "waw_transit_pipeline.gtfs.main"))
+    _BOOTSTRAP = ServiceSpec("gtfs-once", ("-m", "waw_transit_pipeline.composition.gtfs"))
     _SERVICES = (
-        ServiceSpec("ingest", ("-m", "waw_transit_pipeline.ingest.main")),
-        ServiceSpec("gtfs-watch", ("-m", "waw_transit_pipeline.gtfs.main", "--watch")),
-        ServiceSpec("processing", ("-m", "waw_transit_pipeline.processing.main")),
+        ServiceSpec("ingest", ("-m", "waw_transit_pipeline.composition.ingest")),
+        ServiceSpec("gtfs-watch", ("-m", "waw_transit_pipeline.composition.gtfs", "--watch")),
+        ServiceSpec("processing", ("-m", "waw_transit_pipeline.composition.processing")),
     )
 
     def __init__(self) -> None:

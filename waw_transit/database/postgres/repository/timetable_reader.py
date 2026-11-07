@@ -5,10 +5,11 @@ from datetime import date
 from typing import Sequence, override
 
 import pandas as pd
+import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ReadRepository
+from waw_transit.core import ProviderReadRepository, ReadRepository, RepositoryError
 from waw_transit.core.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
@@ -23,11 +24,11 @@ _DTYPES = {
 }
 
 
-def create_timetable_reader(schema: str = "public", table: str = "static_timetable") -> ReadRepository:
+def create_timetable_reader(schema: str = "public", table: str = "static_timetable") -> ReadRepository[Sequence[date], tuple[pd.DataFrame, int]]:
     return _TimetableReader(create_provider(), schema, table)
 
 
-class _TimetableReader(ReadRepository[cursor, Sequence[date], tuple[pd.DataFrame, int]]):
+class _TimetableReader(ProviderReadRepository[cursor, Sequence[date], tuple[pd.DataFrame, int]]):
     """Reads whole service days of `static_timetable` with COPY (cheap even for ~1M rows)."""
 
     def __init__(self, provider: Provider[cursor], schema: str = "public", table: str = "static_timetable") -> None:
@@ -38,22 +39,25 @@ class _TimetableReader(ReadRepository[cursor, Sequence[date], tuple[pd.DataFrame
     @override
     def load(self, payload: Sequence[date]) -> tuple[pd.DataFrame, int]:
         buffer = io.StringIO()
-        with self._provider.open() as cur:
-            version_id = self._active_version(cur)
-            query = sql.SQL(
-                "SELECT {cols} FROM {tbl} WHERE service_date = ANY(ARRAY[{dates}]::date[]) "
-                "AND gtfs_version = {version} "
-                "ORDER BY service_date, trip_id, stop_sequence"
-            ).format(
-                cols=sql.SQL(", ").join(map(sql.Identifier, _COLUMNS)),
-                tbl=self._table,
-                version=sql.Literal(version_id),
-                dates=sql.SQL(", ").join(sql.Literal(d.isoformat()) for d in payload),
-            )
-            cur.copy_expert(
-                sql.SQL("COPY ({q}) TO STDOUT WITH (FORMAT csv, HEADER true)").format(q=query).as_string(cur),
-                buffer,
-            )
+        try:
+            with self._provider.open() as cur:
+                version_id = self._active_version(cur)
+                query = sql.SQL(
+                    "SELECT {cols} FROM {tbl} WHERE service_date = ANY(ARRAY[{dates}]::date[]) "
+                    "AND gtfs_version = {version} "
+                    "ORDER BY service_date, trip_id, stop_sequence"
+                ).format(
+                    cols=sql.SQL(", ").join(map(sql.Identifier, _COLUMNS)),
+                    tbl=self._table,
+                    version=sql.Literal(version_id),
+                    dates=sql.SQL(", ").join(sql.Literal(d.isoformat()) for d in payload),
+                )
+                cur.copy_expert(
+                    sql.SQL("COPY ({q}) TO STDOUT WITH (FORMAT csv, HEADER true)").format(q=query).as_string(cur),
+                    buffer,
+                )
+        except psycopg2.Error as err:
+            raise RepositoryError(f"Failed to load the timetable, reason: {err}") from err
         buffer.seek(0)
         df = pd.read_csv(buffer, dtype=_DTYPES, keep_default_na=False)
         df["service_date"] = pd.to_datetime(df["service_date"]).dt.date
@@ -66,5 +70,5 @@ class _TimetableReader(ReadRepository[cursor, Sequence[date], tuple[pd.DataFrame
         )
         row = cur.fetchone()
         if row is None:
-            raise RuntimeError("No active GTFS version in the database")
+            raise RepositoryError("No active GTFS version in the database")
         return int(row[0])

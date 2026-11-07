@@ -2,31 +2,35 @@ from __future__ import annotations
 
 from typing import override
 
+import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ReadRepository
+from waw_transit.core import ProviderReadRepository, ReadRepository, RepositoryError
 from waw_transit.core.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 
-def create_version_reader(schema: str = "public") -> ReadRepository:
+def create_version_reader(schema: str = "public") -> ReadRepository[None, int]:
     return _VersionReader(create_provider(), schema)
 
 
-class _VersionReader(ReadRepository[cursor, None, int]):
+class _VersionReader(ProviderReadRepository[cursor, None, int]):
     def __init__(self, provider: Provider[cursor], schema: str = "public") -> None:
         super().__init__(provider)
         self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
     def load(self, payload: None = None) -> int:
-        with self._provider.open() as cur:
-            cur.execute(
-                sql.SQL("SELECT version_id FROM {tbl} WHERE status = 'active'")
-                .format(tbl=self._versions)
-            )
-            row = cur.fetchone()
+        try:
+            with self._provider.open() as cur:
+                cur.execute(
+                    sql.SQL("SELECT version_id FROM {tbl} WHERE status = 'active'")
+                    .format(tbl=self._versions)
+                )
+                row = cur.fetchone()
+        except psycopg2.Error as err:
+            raise RepositoryError(f"Failed to read the active GTFS version, reason: {err}") from err
         if row is None:
-            raise RuntimeError("No active GTFS version in the database")
+            raise RepositoryError("No active GTFS version in the database")
         return int(row[0])

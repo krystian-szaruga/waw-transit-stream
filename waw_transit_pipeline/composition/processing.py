@@ -2,12 +2,22 @@ import logging
 import sys
 import warnings
 
+from waw_transit.database import create_timetable_reader, create_version_reader
+from waw_transit.database.redis import open_live_state_repository
 from waw_transit_pipeline.processing import ProcessingService
+from waw_transit_pipeline.processing.config import ProcessingConfigLoader
 
 
-def _main() -> None:
+def run_processing() -> None:
     _setup_logging()
-    ProcessingService().run()
+    config = ProcessingConfigLoader().load()
+    with open_live_state_repository(config.timezone) as repository:
+        ProcessingService(
+            config,
+            repository,
+            create_timetable_reader(),
+            create_version_reader(),
+        ).run()
 
 
 def _setup_logging() -> None:
@@ -24,4 +34,4 @@ def _setup_logging() -> None:
 
 
 if __name__ == "__main__":
-    _main()
+    run_processing()

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
-from waw_transit.core.models import Payload
 from waw_transit.core.repository.repository import Repository
 
 
-class SaveRepository[Resource, Frame, Result](Repository[Resource]):
+class SaveRepository[Frame, Result](ABC):
 
     @abstractmethod
-    def save(self, data: Payload[Frame]) -> Result:
+    def save(self, frame: Frame) -> Result:
         pass
+
+
+class ProviderSaveRepository[Resource, Frame, Result](
+    Repository[Resource], SaveRepository[Frame, Result], ABC
+):
+    pass

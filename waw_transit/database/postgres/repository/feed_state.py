@@ -3,16 +3,16 @@ from typing import override
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ResourceState, ResourceStateRepository
+from waw_transit.core import ProviderResourceStateRepository, ResourceState, ResourceStateRepository
 from waw_transit.core.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 
-def create_state_repository(schema: str = "public") -> ResourceStateRepository[cursor]:
+def create_state_repository(schema: str = "public") -> ResourceStateRepository:
     return _StateRepository(create_provider(), schema)
 
 
-class _StateRepository(ResourceStateRepository[cursor]):
+class _StateRepository(ProviderResourceStateRepository[cursor]):
     def __init__(self, provider: Provider[cursor], schema: str = "public") -> None:
         super().__init__(provider)
         self._table = sql.Identifier(schema, "gtfs_feed_state")
