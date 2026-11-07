@@ -11,7 +11,17 @@ dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-[tool.setuptools.packages.find]
-where = [".."]
-include = ["waw_transit", "waw_transit.*"]
-namespaces = true
+[tool.setuptools]
+package-dir = { "waw_transit" = "." }
+packages = [
+    "waw_transit",
+    "waw_transit.config",
+    "waw_transit.core",
+    "waw_transit.core.models",
+    "waw_transit.core.repository",
+    "waw_transit.core.request",
+    "waw_transit.database",
+    "waw_transit.database.postgres",
+    "waw_transit.database.postgres.repository",
+    "waw_transit.database.redis",
+]

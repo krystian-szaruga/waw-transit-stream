@@ -11,7 +11,6 @@ dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-[tool.setuptools.packages.find]
-where = [".."]
-include = ["waw_transit_backend", "waw_transit_backend.*"]
-namespaces = true
+[tool.setuptools]
+package-dir = { "waw_transit_backend" = "." }
+packages = ["waw_transit_backend"]
