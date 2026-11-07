@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from pyspark.sql.types import (
+    BinaryType,
+    DataType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
+
+from waw_transit_pipeline.processing.model import TripMatchCol
+
+
+class Schema:
+    _TYPES: dict[TripMatchCol, DataType] = {
+        TripMatchCol.TRIP_ID: StringType(),
+        TripMatchCol.DIST_M: DoubleType(),
+        TripMatchCol.DELAY_SEC: DoubleType(),
+        TripMatchCol.COST: DoubleType(),
+        TripMatchCol.MATCH_STATUS: StringType(),
+        TripMatchCol.VEHICLE_TYPE: IntegerType(),
+        TripMatchCol.VEHICLE_NUMBER: StringType(),
+        TripMatchCol.BRIGADE: StringType(),
+        TripMatchCol.LINE: StringType(),
+        TripMatchCol.API_TS: TimestampType(),
+        TripMatchCol.GTFS_VERSION: LongType(),
+        TripMatchCol.LON: DoubleType(),
+        TripMatchCol.LAT: DoubleType(),
+        TripMatchCol.NEXT_STOP_SEQUENCE: LongType(),
+    }
+
+    @staticmethod
+    def output() -> StructType:
+        schema = StructType()
+        for column in TripMatchCol:
+            schema.add(column.value, Schema._TYPES[column])
+        return schema
+
+    @staticmethod
+    def state() -> StructType:
+        return StructType([
+            StructField("vehicles", BinaryType(), True),
+            StructField("owners", BinaryType(), True),
+        ])

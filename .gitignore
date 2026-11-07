@@ -37,9 +37,12 @@ derby.log
 # Local infrastructure data
 infra/postgres_data/
 
+# Runtime data
+var/
+
 # Logs
 *.log
 logs/
-docs/*
+docs/
 checkpoints/
 podman-tests.sh

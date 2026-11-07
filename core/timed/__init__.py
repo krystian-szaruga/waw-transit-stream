@@ -1,1 +1,0 @@
-from .timed import timed
