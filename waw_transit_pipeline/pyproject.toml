@@ -11,7 +11,27 @@ dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-[tool.setuptools.packages.find]
-where = [".."]
-include = ["waw_transit_pipeline", "waw_transit_pipeline.*"]
-namespaces = true
+[tool.setuptools]
+package-dir = { "waw_transit_pipeline" = "." }
+packages = [
+    "waw_transit_pipeline",
+    "waw_transit_pipeline.gtfs",
+    "waw_transit_pipeline.gtfs.loader",
+    "waw_transit_pipeline.gtfs.loader.builder",
+    "waw_transit_pipeline.gtfs.request",
+    "waw_transit_pipeline.ingest",
+    "waw_transit_pipeline.ingest.config",
+    "waw_transit_pipeline.ingest.pipeline",
+    "waw_transit_pipeline.ingest.producer",
+    "waw_transit_pipeline.ingest.request",
+    "waw_transit_pipeline.processing",
+    "waw_transit_pipeline.processing.assignment",
+    "waw_transit_pipeline.processing.assignment.records",
+    "waw_transit_pipeline.processing.config",
+    "waw_transit_pipeline.processing.lookup",
+    "waw_transit_pipeline.processing.model",
+    "waw_transit_pipeline.processing.session",
+    "waw_transit_pipeline.processing.sink",
+    "waw_transit_pipeline.processing.source",
+    "waw_transit_pipeline.supervisor",
+]
