@@ -4,7 +4,7 @@ from psycopg2 import sql
 from psycopg2.extensions import cursor
 
 from waw_transit.core import ProviderResourceStateRepository, ResourceState, ResourceStateRepository
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 

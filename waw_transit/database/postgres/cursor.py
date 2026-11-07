@@ -9,7 +9,7 @@ import psycopg2
 from psycopg2.extensions import cursor
 
 from waw_transit.config import ConfigLoader
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.ports.repository.provider import Provider
 
 
 class PgCursorProvider(Provider[cursor]):

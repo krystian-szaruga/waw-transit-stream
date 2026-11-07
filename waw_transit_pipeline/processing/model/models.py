@@ -10,6 +10,8 @@ from typing import NamedTuple, Iterator, Iterable, Mapping
 
 import numpy as np
 
+from waw_transit_pipeline.core.models import WarsawLiveCol
+
 from waw_transit_pipeline.processing.model.const import M_PER_DEG
 
 
@@ -34,18 +36,6 @@ class TripMatchCol(StrEnum):
     LON = "lon"
     LAT = "lat"
     NEXT_STOP_SEQUENCE = "next_stop_sequence"
-
-
-class WarsawLiveCol(StrEnum):
-    """fields of the Warsaw API payload (values = JSON keys)"""
-    LINE = "Lines"
-    BRIGADE = "Brigade"
-    VEHICLE_NUMBER = "VehicleNumber"
-    LON = "Lon"
-    LAT = "Lat"
-    TIME = "Time"
-    # derived from the Kafka topic, not part of the payload
-    VEHICLE_TYPE = "vehicle_type"
 
 class VehicleType(IntEnum):
     BUS = 1

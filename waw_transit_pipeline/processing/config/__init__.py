@@ -1,4 +1,4 @@
-from .config import ProcessingConfig, KafkaConfig
+from .config import ProcessingConfig
 from .loader import ProcessingConfigLoader
 
-__all__ = ["ProcessingConfig", "ProcessingConfigLoader", "KafkaConfig"]
+__all__ = ["ProcessingConfig", "ProcessingConfigLoader"]

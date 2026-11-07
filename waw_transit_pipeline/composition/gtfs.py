@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import argparse
 import logging
 
 from waw_transit.database import create_timetable_writer
 from waw_transit.database.postgres.repository.feed_state import create_state_repository
+from waw_transit_pipeline.adapters.gtfs import create_gtfs_downloader
 from waw_transit_pipeline.gtfs.loader import TimetableLoader
 from waw_transit_pipeline.gtfs.sync import TimetableSync
 
@@ -16,6 +19,7 @@ def run_gtfs(argv: list[str] | None = None) -> None:
     sync = TimetableSync(
         TimetableLoader(create_timetable_writer()),
         create_state_repository(),
+        create_gtfs_downloader(),
         args.interval,
     )
     if args.watch:

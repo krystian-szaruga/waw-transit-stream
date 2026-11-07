@@ -20,10 +20,14 @@ logger = logging.getLogger(__name__)
 @contextmanager
 def open_live_state_repository(timezone: str) -> Iterator[SaveRepository[LiveStateBatch, None]]:
     with RedisSession() as session:
-        yield RedisLiveStateRepository(session, timezone)
+        yield create_live_state_repository(session, timezone)
 
 
-class RedisLiveStateRepository(ProviderSaveRepository[redis.Redis, LiveStateBatch, None]):
+def create_live_state_repository(session: RedisSession, timezone: str) -> SaveRepository[LiveStateBatch, None]:
+    return _RedisLiveStateRepository(session, timezone)
+
+
+class _RedisLiveStateRepository(ProviderSaveRepository[redis.Redis, LiveStateBatch, None]):
 
     def __init__(self, session: RedisSession, timezone: str) -> None:
         super().__init__(session)

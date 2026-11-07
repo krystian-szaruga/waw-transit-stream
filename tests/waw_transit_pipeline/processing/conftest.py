@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 from testcontainers.community.kafka import RedpandaContainer
 from testcontainers.community.redis import RedisContainer
 
-from waw_transit_pipeline.processing.config import KafkaConfig
+from waw_transit_pipeline.core.config import KafkaConfig
 from waw_transit.core import ReadRepository
 from waw_transit_pipeline.processing.lookup import LookupLoader
 from waw_transit_pipeline.processing.model import VehicleType
@@ -37,8 +37,9 @@ def redpanda() -> Iterator[KafkaConfig]:
             future.result()
         yield KafkaConfig(
             bootstrap_servers=bootstrap,
-            topics=topics,
+            client_id="tests",
             starting_offsets="earliest",
+            topics={VehicleType.BUS.name.lower(): "buses", VehicleType.TRAM.name.lower(): "trams"},
         )
 
 

@@ -12,15 +12,14 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
 from waw_transit.core import ReadRepository, RepositoryError, SaveRepository
+from waw_transit_pipeline.core.ports import StreamReader
 from waw_transit.core.models import LiveStateBatch
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
 from waw_transit_pipeline.processing.config import ProcessingConfig
 from waw_transit_pipeline.processing.console_stats import console_stats
 from waw_transit_pipeline.processing.lookup import LookupLoader
 from waw_transit_pipeline.processing.model import LookupSnapshot
-from waw_transit_pipeline.processing.session import SparkSessionContext
 from waw_transit_pipeline.processing.sink.preparer import LiveStatePreparer
-from waw_transit_pipeline.processing.source import LiveReader
 
 logger = logging.getLogger("warsaw_transit_stream_processing")
 
@@ -36,11 +35,13 @@ class ProcessingService:
         sink: SaveRepository[LiveStateBatch, None],
         timetable_reader: ReadRepository,
         version_reader: ReadRepository,
+        stream_reader: StreamReader[SparkSession, DataFrame],
     ) -> None:
         self._config = config
         self._sink = sink
         self._timetable_reader = timetable_reader
         self._version_reader = version_reader
+        self._stream_reader = stream_reader
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -51,30 +52,29 @@ class ProcessingService:
         signal.signal(signal.SIGINT, lambda *_: self.stop())
         signal.signal(signal.SIGTERM, lambda *_: self.stop())
 
-    def run(self) -> None:
+    def run(self, spark: SparkSession) -> None:
         self._register_system_signals()
         logger.info("Loading timetable lookup...")
         snapshot = LookupLoader(self._timetable_reader).load()
         versions = self._version_reader
         logger.info("Loaded timetable version %d", snapshot.version_id)
-        with SparkSessionContext(self._config.timezone).open() as spark:
-            gen = self._prepare(spark, snapshot)
-            while not self._stop.is_set():
-                console = self._start(spark, gen)
-                changed = self._await(console, versions, gen.snapshot.version_id)
-                next_gen: _VersionContext | None = None
-                if changed and not self._stop.is_set():
-                    next_gen = self._prepare_next(spark, gen.snapshot)
-                self._stop_when_idle(console)
-                gen.broadcast.destroy()
-                if next_gen is None:
-                    return
-                if self._stop.is_set():
-                    next_gen.broadcast.destroy()
-                    return
-                gen = next_gen
-            if gen is not None:
-                gen.broadcast.destroy()
+        gen = self._prepare(spark, snapshot)
+        while not self._stop.is_set():
+            console = self._start(spark, gen)
+            changed = self._await(console, versions, gen.snapshot.version_id)
+            next_gen: _VersionContext | None = None
+            if changed and not self._stop.is_set():
+                next_gen = self._prepare_next(spark, gen.snapshot)
+            self._stop_when_idle(console)
+            gen.broadcast.destroy()
+            if next_gen is None:
+                return
+            if self._stop.is_set():
+                next_gen.broadcast.destroy()
+                return
+            gen = next_gen
+        if gen is not None:
+            gen.broadcast.destroy()
 
     def _prepare(self, spark: SparkSession, snapshot: LookupSnapshot) -> _VersionContext:
         preparer = LiveStatePreparer(snapshot.lookup, self._config.timezone)
@@ -114,7 +114,7 @@ class ProcessingService:
         return current
 
     def _matched(self, spark: SparkSession, lookup_bc: Broadcast[LookupSnapshot]) -> DataFrame:
-        live: DataFrame = LiveReader(spark, self._config.kafka).read()
+        live: DataFrame = self._stream_reader.read(spark)
         return AssignmentPipeline(lookup_bc).build(live)
 
     def _await(self, console: StreamingQuery, versions, version_id: int) -> bool:

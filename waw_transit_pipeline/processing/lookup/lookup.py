@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from waw_transit.core.repository import ReadRepository
+from waw_transit.core.ports.repository import ReadRepository
 from waw_transit_pipeline.processing.model import Trip, TripKey, TripGeometry, Lookup, LookupSnapshot, VehicleType, M_PER_DEG
 
 

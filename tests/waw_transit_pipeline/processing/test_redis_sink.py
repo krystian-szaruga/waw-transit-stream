@@ -10,7 +10,7 @@ import pytest
 from waw_transit_pipeline.processing.assignment.schema import Schema
 from waw_transit_pipeline.processing.model import TripMatchCol, MatchStatus
 from waw_transit.database.redis import RedisSession
-from waw_transit.database.redis.live_state_repository import RedisLiveStateRepository
+from waw_transit.database.redis import create_live_state_repository
 from waw_transit_pipeline.processing.sink import LiveStatePreparer
 
 _TIMEZONE = "Europe/Warsaw"
@@ -18,7 +18,7 @@ _CHANNEL = "vehicles.updates"
 
 
 def _write(session, lookup, frame) -> None:
-    RedisLiveStateRepository(session, _TIMEZONE).save(
+    create_live_state_repository(session, _TIMEZONE).save(
         LiveStatePreparer(lookup, _TIMEZONE).prepare(frame)
     )
 

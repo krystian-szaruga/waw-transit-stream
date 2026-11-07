@@ -2,7 +2,7 @@ import threading
 
 from waw_transit.core import RepositoryError
 from waw_transit_pipeline.processing import ProcessingService
-from waw_transit_pipeline.processing.config import KafkaConfig, ProcessingConfig
+from waw_transit_pipeline.processing.config import ProcessingConfig
 
 
 class _StoppingEvent(threading.Event):
@@ -56,12 +56,16 @@ class _Reader:
         return None
 
 
+class _StreamReader:
+    def read(self, session):
+        return None
+
+
 def _service(stop_after: int) -> ProcessingService:
     config = ProcessingConfig(
-        kafka=KafkaConfig(bootstrap_servers="localhost:9092"),
         checkpoint_location="/tmp/checkpoints",
     )
-    service = ProcessingService(config, _Sink(), _Reader(), _Reader())
+    service = ProcessingService(config, _Sink(), _Reader(), _Reader(), _StreamReader())
     service._stop = _StoppingEvent(stop_after)
     return service
 

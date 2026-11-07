@@ -7,7 +7,7 @@ from psycopg2 import sql
 from psycopg2._psycopg import cursor
 
 from waw_transit.core import SaveRepository, Payload, ProviderSaveRepository
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 

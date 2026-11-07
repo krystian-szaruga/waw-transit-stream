@@ -1,10 +1,11 @@
 import threading
 
-from waw_transit_pipeline.ingest.config import IngestAppConfig, ApiConfig, KafkaProducerConfig
+from waw_transit_pipeline.core.ports import Publisher
+from waw_transit_pipeline.ingest.config import IngestAppConfig
 from waw_transit_pipeline.ingest.pipeline import WarsawTransitPipeline
 
 
-class _StopSignalProducer:
+class _StopSignalPublisher:
     def __init__(self, name: str, stop_event: threading.Event, executed: list[str]) -> None:
         self._name = name
         self._stop_event = stop_event
@@ -15,54 +16,59 @@ class _StopSignalProducer:
         self._stop_event.set()
 
 
-class _FakeKafkaClient:
+class _FakePublisher(Publisher):
     def __init__(self) -> None:
-        self.polls: list[float] = []
+        self.polls = 0
 
-    def poll(self, timeout: float) -> None:
-        self.polls.append(timeout)
+    def publish(self, payload: bytes) -> None:
+        pass
+
+    def poll(self) -> None:
+        self.polls += 1
+
+    def flush(self, timeout: float) -> None:
+        pass
 
 
 def _config(fetch_interval_seconds: int = 15) -> IngestAppConfig:
     return IngestAppConfig(
-        api=ApiConfig("token", fetch_interval_seconds),
-        kafka=KafkaProducerConfig("kafka:9092", "client", "buses", "trams"),
+        fetch_interval_seconds=fetch_interval_seconds,
     )
 
 
-def test_when_stop_event_is_already_set_then_no_producer_executes():
+def test_when_stop_event_is_already_set_then_no_publisher_executes():
     stop_event = threading.Event()
     stop_event.set()
     executed: list[str] = []
-    kafka = _FakeKafkaClient()
+    publisher = _FakePublisher()
     pipeline = WarsawTransitPipeline(
         _config(),
-        [_StopSignalProducer("bus", stop_event, executed)],
-        kafka,
+        [_StopSignalPublisher("bus", stop_event, executed)],
+        publisher,
         stop_event,
     )
 
     pipeline.run()
 
     assert executed == []
-    assert kafka.polls == []
+    assert publisher.polls == 0
 
 
-def test_when_a_cycle_runs_then_all_producers_execute_before_polling():
+def test_when_a_cycle_runs_then_all_publishers_execute_before_polling():
     stop_event = threading.Event()
     executed: list[str] = []
-    kafka = _FakeKafkaClient()
+    publisher = _FakePublisher()
     pipeline = WarsawTransitPipeline(
         _config(),
         [
-            _StopSignalProducer("bus", stop_event, executed),
-            _StopSignalProducer("tram", stop_event, executed),
+            _StopSignalPublisher("bus", stop_event, executed),
+            _StopSignalPublisher("tram", stop_event, executed),
         ],
-        kafka,
+        publisher,
         stop_event,
     )
 
     pipeline.run()
 
     assert executed == ["bus", "tram"]
-    assert kafka.polls == [0]
+    assert publisher.polls == 1

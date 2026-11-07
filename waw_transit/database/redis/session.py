@@ -8,7 +8,7 @@ from typing import override
 import redis
 
 from waw_transit.config import ConfigLoader
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.ports.repository.provider import Provider
 
 
 class RedisSession(Provider[redis.Redis]):

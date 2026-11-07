@@ -1,6 +1,6 @@
 from .errors import RepositoryError
 from .models import LiveStateBatch, Payload, ResourceState, StopDeparture, VehicleSnapshot
-from .repository import (
+from .ports.repository import (
     Provider,
     ProviderReadRepository,
     ReadRepository,
