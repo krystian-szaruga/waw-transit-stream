@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=84"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "waw-transit-stream"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["waw_transit*", "waw_transit_pipeline*", "waw_transit_backend*"]
+namespaces = true
