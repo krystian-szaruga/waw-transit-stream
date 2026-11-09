@@ -6,6 +6,7 @@ from waw_transit.database.postgres.repository.stop_reader import (
     create_all_stops_reader,
     create_stop_reader,
 )
+from waw_transit.database.postgres.repository.trip_reader import create_lines_reader
 from waw_transit_backend.application.services import (
     DepartureService,
     LineService,
@@ -29,6 +30,6 @@ def create_container() -> AppContainer:
         vehicle_service=None,
         stop_service=StopService(create_all_stops_reader(), create_stop_reader()),
         departure_service=None,
-        line_service=None,
+        line_service=LineService(create_lines_reader()),
         live_feed_service=None,
     )

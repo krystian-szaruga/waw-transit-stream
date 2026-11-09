@@ -23,4 +23,4 @@ def get_departure_service(request: Request) -> DepartureService:
 
 
 def get_line_service(request: Request) -> LineService:
-    pass
+    return request.app.state.container.line_service
