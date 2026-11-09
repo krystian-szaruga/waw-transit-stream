@@ -41,3 +41,16 @@ class StopDeparture:
     @property
     def score(self) -> float:
         return self.predicted.timestamp()
+
+
+@dataclass(frozen=True, slots=True)
+class StopDepartureRecord:
+    stop_id: str
+    vehicle_id: str
+    vehicle_type: int
+    line: str
+    brigade: str
+    trip_id: str
+    stop_sequence: int
+    scheduled: datetime
+    predicted: datetime

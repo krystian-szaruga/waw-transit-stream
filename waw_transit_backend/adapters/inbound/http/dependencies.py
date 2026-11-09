@@ -19,7 +19,7 @@ def get_stop_service(request: Request) -> StopService:
 
 
 def get_departure_service(request: Request) -> DepartureService:
-    pass
+    return request.app.state.container.departure_service
 
 
 def get_line_service(request: Request) -> LineService:
