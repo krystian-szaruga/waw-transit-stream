@@ -1,8 +1,8 @@
 import threading
 
-import psycopg2
-
+from waw_transit.core import RepositoryError
 from waw_transit_pipeline.processing import ProcessingService
+from waw_transit_pipeline.processing.config import ProcessingConfig
 
 
 class _StoppingEvent(threading.Event):
@@ -42,12 +42,30 @@ class _FlakyVersions:
     def load(self) -> int:
         if not self._failed:
             self._failed = True
-            raise psycopg2.OperationalError("database is down")
+            raise RepositoryError("database is down")
         return self._then
 
 
+class _Sink:
+    def save(self, frame) -> None:
+        pass
+
+
+class _Reader:
+    def load(self, payload=None):
+        return None
+
+
+class _StreamReader:
+    def read(self, session):
+        return None
+
+
 def _service(stop_after: int) -> ProcessingService:
-    service = ProcessingService()
+    config = ProcessingConfig(
+        checkpoint_location="/tmp/checkpoints",
+    )
+    service = ProcessingService(config, _Sink(), _Reader(), _Reader(), _StreamReader())
     service._stop = _StoppingEvent(stop_after)
     return service
 

@@ -6,22 +6,20 @@ import threading
 import time
 from dataclasses import dataclass
 
-import psycopg2
 from py4j.protocol import Py4JJavaError
 from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from waw_transit.database import create_timetable_reader, create_version_reader
+from waw_transit.core import ReadRepository, RepositoryError, SaveRepository
+from waw_transit_pipeline.core.ports import StreamReader
+from waw_transit.core.models import LiveStateBatch
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
-from waw_transit_pipeline.processing.config import ProcessingConfig, ProcessingConfigLoader
+from waw_transit_pipeline.processing.config import ProcessingConfig
 from waw_transit_pipeline.processing.console_stats import console_stats
 from waw_transit_pipeline.processing.lookup import LookupLoader
 from waw_transit_pipeline.processing.model import LookupSnapshot
-from waw_transit.database.redis import RedisSession
-from waw_transit_pipeline.processing.session import SparkSessionContext
-from waw_transit_pipeline.processing.sink import RedisSink
-from waw_transit_pipeline.processing.source import LiveReader
+from waw_transit_pipeline.processing.sink.preparer import LiveStatePreparer
 
 logger = logging.getLogger("warsaw_transit_stream_processing")
 
@@ -31,8 +29,19 @@ class ProcessingService:
     _IDLE_POLL_SEC = 0.2
     _IDLE_TIMEOUT_SEC = 60.0
 
-    def __init__(self) -> None:
-        self._config: ProcessingConfig = ProcessingConfigLoader().load()
+    def __init__(
+        self,
+        config: ProcessingConfig,
+        sink: SaveRepository[LiveStateBatch, None],
+        timetable_reader: ReadRepository,
+        version_reader: ReadRepository,
+        stream_reader: StreamReader[SparkSession, DataFrame],
+    ) -> None:
+        self._config = config
+        self._sink = sink
+        self._timetable_reader = timetable_reader
+        self._version_reader = version_reader
+        self._stream_reader = stream_reader
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -43,40 +52,39 @@ class ProcessingService:
         signal.signal(signal.SIGINT, lambda *_: self.stop())
         signal.signal(signal.SIGTERM, lambda *_: self.stop())
 
-    def run(self) -> None:
+    def run(self, spark: SparkSession) -> None:
         self._register_system_signals()
         logger.info("Loading timetable lookup...")
-        snapshot = LookupLoader(create_timetable_reader()).load()
-        versions = create_version_reader()
+        snapshot = LookupLoader(self._timetable_reader).load()
+        versions = self._version_reader
         logger.info("Loaded timetable version %d", snapshot.version_id)
-        with RedisSession(self._config.redis) as session:
-            with SparkSessionContext(self._config.timezone).open() as spark:
-                gen = self._prepare(spark, session, snapshot)
-                while not self._stop.is_set():
-                    console = self._start(spark, gen)
-                    changed = self._await(console, versions, gen.snapshot.version_id)
-                    next_gen: _VersionContext | None = None
-                    if changed and not self._stop.is_set():
-                        next_gen = self._prepare_next(spark, session, gen.snapshot)
-                    self._stop_when_idle(console)
-                    gen.broadcast.destroy()
-                    if next_gen is None:
-                        return
-                    if self._stop.is_set():
-                        next_gen.broadcast.destroy()
-                        return
-                    gen = next_gen
-                gen.broadcast.destroy()
+        gen = self._prepare(spark, snapshot)
+        while not self._stop.is_set():
+            console = self._start(spark, gen)
+            changed = self._await(console, versions, gen.snapshot.version_id)
+            next_gen: _VersionContext | None = None
+            if changed and not self._stop.is_set():
+                next_gen = self._prepare_next(spark, gen.snapshot)
+            self._stop_when_idle(console)
+            gen.broadcast.destroy()
+            if next_gen is None:
+                return
+            if self._stop.is_set():
+                next_gen.broadcast.destroy()
+                return
+            gen = next_gen
+        if gen is not None:
+            gen.broadcast.destroy()
 
-    def _prepare(self, spark: SparkSession, session: RedisSession, snapshot: LookupSnapshot) -> _VersionContext:
-        sink = RedisSink(session, snapshot.lookup, self._config.timezone)
+    def _prepare(self, spark: SparkSession, snapshot: LookupSnapshot) -> _VersionContext:
+        preparer = LiveStatePreparer(snapshot.lookup, self._config.timezone)
         broadcast = spark.sparkContext.broadcast(snapshot)
-        return _VersionContext(snapshot, sink, broadcast)
+        return _VersionContext(snapshot, preparer, self._sink, broadcast)
 
-    def _prepare_next(self, spark: SparkSession, session: RedisSession, current: LookupSnapshot) -> _VersionContext | None:
+    def _prepare_next(self, spark: SparkSession, current: LookupSnapshot) -> _VersionContext | None:
         new_snapshot = self._reload(current)
         if new_snapshot is current: return None
-        return self._prepare(spark, session, new_snapshot)
+        return self._prepare(spark, new_snapshot)
 
     def _start(self, spark: SparkSession, gen: _VersionContext) -> StreamingQuery:
         return (
@@ -84,7 +92,7 @@ class ProcessingService:
             .writeStream
             .option("checkpointLocation", self._config.checkpoint_location)
             .trigger(processingTime="15 seconds")
-            .foreachBatch(_BatchHandler(gen.sink))
+            .foreachBatch(_BatchHandler(gen.preparer, gen.sink))
             .start()
         )
 
@@ -92,10 +100,12 @@ class ProcessingService:
         while not self._stop.is_set():
             logger.info("Loading timetable lookup...")
             try:
-                snapshot = LookupLoader(create_timetable_reader()).load()
-            except (psycopg2.Error, RuntimeError):
-                logger.exception(
-                    "Failed to reload the lookup; keeping version %d", current.version_id
+                snapshot = LookupLoader(self._timetable_reader).load()
+            except RepositoryError as err:
+                logger.error(
+                    "Failed to reload the lookup; keeping version %d, %s",
+                    current.version_id,
+                    err,
                 )
                 self._stop.wait(timeout=self._VERSION_POLL_SEC)
                 continue
@@ -104,7 +114,7 @@ class ProcessingService:
         return current
 
     def _matched(self, spark: SparkSession, lookup_bc: Broadcast[LookupSnapshot]) -> DataFrame:
-        live: DataFrame = LiveReader(spark, self._config.kafka).read()
+        live: DataFrame = self._stream_reader.read(spark)
         return AssignmentPipeline(lookup_bc).build(live)
 
     def _await(self, console: StreamingQuery, versions, version_id: int) -> bool:
@@ -116,9 +126,11 @@ class ProcessingService:
                     if active != version_id:
                         logger.info("New version %d detected (loaded %d)", active, version_id)
                         return True
-                except (psycopg2.Error, RuntimeError):
-                    logger.exception(
-                        "Failed to read the active GTFS version; keeping version %d", version_id
+                except RepositoryError as err:
+                    logger.error(
+                        "Failed to read the active GTFS version; keeping version %d, %s",
+                        version_id,
+                        err,
                     )
                 self._stop.wait(timeout=self._VERSION_POLL_SEC)
         except KeyboardInterrupt:
@@ -138,21 +150,23 @@ class ProcessingService:
             if console.isActive:
                 console.stop()
             console.awaitTermination()
-        except (StreamingQueryException, Py4JJavaError):
-            logger.exception("Streaming query terminated with an error while stopping")
+        except (StreamingQueryException, Py4JJavaError) as err:
+            logger.error("Streaming query terminated with an error while stopping: %s", err)
 
 
 @dataclass
 class _VersionContext:
     snapshot: LookupSnapshot
-    sink: RedisSink
+    preparer: LiveStatePreparer
+    sink: SaveRepository[LiveStateBatch, None]
     broadcast: Broadcast[LookupSnapshot]
 
 
 class _BatchHandler:
-    def __init__(self, sink: RedisSink) -> None:
+    def __init__(self, preparer: LiveStatePreparer, sink: SaveRepository[LiveStateBatch, None]) -> None:
+        self._preparer = preparer
         self._sink = sink
 
     def __call__(self, batch_df: DataFrame, batch_id: int) -> None:
         console_stats(batch_df, batch_id)
-        self._sink.write(batch_df)
+        self._sink.save(self._preparer.prepare(batch_df))

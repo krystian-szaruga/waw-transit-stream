@@ -7,11 +7,13 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from confluent_kafka import Producer
 
+from waw_transit_pipeline.adapters.kafka import stream_options, topic_to_vehicle_type
+from waw_transit_pipeline.adapters.spark import open_stream, parse_records
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
-from waw_transit_pipeline.processing.model import VehicleType, WarsawLiveCol, LookupSnapshot
+from waw_transit_pipeline.processing.model import WarsawLiveCol, LookupSnapshot
 from waw_transit.database.redis import RedisSession
-from waw_transit_pipeline.processing.sink import RedisSink
-from waw_transit_pipeline.processing.source import LiveReader
+from waw_transit.database.redis import create_live_state_repository
+from waw_transit_pipeline.processing.sink import LiveStatePreparer
 
 _TIMEZONE = "Europe/Warsaw"
 _TRIP_ID = "t2"
@@ -59,7 +61,7 @@ def test_when_a_ping_arrives_on_kafka_then_it_reaches_redis(
 
     _produce(
         redpanda.bootstrap_servers,
-        redpanda.topics[VehicleType.TRAM],
+        redpanda.topics["tram"],
         {
             WarsawLiveCol.LINE.value: _LINE,
             WarsawLiveCol.BRIGADE.value: "3",
@@ -71,16 +73,24 @@ def test_when_a_ping_arrives_on_kafka_then_it_reaches_redis(
     )
 
     broadcast = spark.sparkContext.broadcast(LookupSnapshot(lookup, _GTFS_VERSION))
-    live = LiveReader(spark, redpanda).read()
+    live = parse_records(
+        open_stream("kafka", stream_options(redpanda)),
+        value_column="value",
+        topic_column="topic",
+        topic_to_type=topic_to_vehicle_type(redpanda),
+    ).read(spark)
     matched = AssignmentPipeline(broadcast).build(live)
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
 
-        sink = RedisSink(session, lookup, _TIMEZONE)
+        repository = create_live_state_repository(session, _TIMEZONE)
+        preparer = LiveStatePreparer(lookup, _TIMEZONE)
         query = (
-            matched.writeStream.foreachBatch(lambda batch, _: sink.write(batch))
+            matched.writeStream.foreachBatch(
+                lambda batch, _: repository.save(preparer.prepare(batch))
+            )
             .option("checkpointLocation", str(tmp_path / "checkpoints"))
             .trigger(availableNow=True)
             .start()

@@ -1,14 +1,13 @@
 import pytest
 
-from waw_transit_pipeline.ingest.config import IngestAppConfig, ApiConfig, KafkaProducerConfig
+from waw_transit_pipeline.ingest.config import IngestAppConfig
 from waw_transit_pipeline.ingest.pipeline.log_pipeline_cycle import log_pipeline_cycle
 
 
 class _Subject:
     def __init__(self, fetch_interval_seconds: int) -> None:
         self._config = IngestAppConfig(
-            api=ApiConfig("token", fetch_interval_seconds),
-            kafka=KafkaProducerConfig("kafka:9092", "client", "buses", "trams"),
+            fetch_interval_seconds=fetch_interval_seconds,
         )
 
     @log_pipeline_cycle

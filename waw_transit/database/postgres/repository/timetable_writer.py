@@ -6,8 +6,8 @@ import pandas as pd
 from psycopg2 import sql
 from psycopg2._psycopg import cursor
 
-from waw_transit.core import SaveRepository, Payload
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core import SaveRepository, Payload, ProviderSaveRepository
+from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 
@@ -15,11 +15,11 @@ def create_timetable_writer(
         schema: str = "public",
         table: str = "static_timetable",
         versions_table: str = "gtfs_versions",
-) -> SaveRepository[cursor, pd.DataFrame, int]:
+) -> SaveRepository[Payload[pd.DataFrame], int]:
     return _TimetableWriter(create_provider(), schema, table, versions_table)
 
 
-class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
+class _TimetableWriter(ProviderSaveRepository[cursor, Payload[pd.DataFrame], int]):
     _KEEP_RETIRED = 3
 
     def __init__(
@@ -34,13 +34,13 @@ class _TimetableWriter(SaveRepository[cursor, pd.DataFrame, int]):
         self._versions = sql.Identifier(schema, versions_table)
 
     @override
-    def save(self, data: Payload[pd.DataFrame]) -> int:
+    def save(self, frame: Payload[pd.DataFrame]) -> int:
         with self._provider.open() as cur:
-            known = self._version_id(cur, data.sha256)
+            known = self._version_id(cur, frame.sha256)
             if known is not None:
                 return known
-            version_id = self._insert_version(cur, data.sha256)
-            self._copy(cur, self._to_csv_buffer(data.frame, version_id), ["gtfs_version", *data.frame.columns])
+            version_id = self._insert_version(cur, frame.sha256)
+            self._copy(cur, self._to_csv_buffer(frame.frame, version_id), ["gtfs_version", *frame.frame.columns])
             self._activate(cur, version_id)
             self._prune(cur, self._KEEP_RETIRED)
             return version_id

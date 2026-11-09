@@ -10,10 +10,17 @@ import pytest
 from waw_transit_pipeline.processing.assignment.schema import Schema
 from waw_transit_pipeline.processing.model import TripMatchCol, MatchStatus
 from waw_transit.database.redis import RedisSession
-from waw_transit_pipeline.processing.sink import RedisSink
+from waw_transit.database.redis import create_live_state_repository
+from waw_transit_pipeline.processing.sink import LiveStatePreparer
 
 _TIMEZONE = "Europe/Warsaw"
 _CHANNEL = "vehicles.updates"
+
+
+def _write(session, lookup, frame) -> None:
+    create_live_state_repository(session, _TIMEZONE).save(
+        LiveStatePreparer(lookup, _TIMEZONE).prepare(frame)
+    )
 
 
 def _row(**overrides) -> dict[str, object]:
@@ -70,10 +77,10 @@ def test_when_a_matched_row_is_written_then_the_vehicle_hash_is_stored(
 ) -> None:
     lookup = load_lookup(timetable_frame).lookup
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(spark, _row()))
+        _write(session, lookup, _frame(spark, _row()))
         with session.open() as client:
             fields = client.hgetall("vehicle:1:2001")
             ttl = client.ttl("vehicle:1:2001")
@@ -93,14 +100,14 @@ def test_when_a_matched_row_is_written_then_the_line_set_and_payload_are_publish
 ) -> None:
     lookup = load_lookup(timetable_frame).lookup
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
             pubsub = client.pubsub()
             pubsub.subscribe(_CHANNEL)
             pubsub.get_message(timeout=1.0)
 
-            RedisSink(session, lookup, _TIMEZONE).write(_frame(spark, _row()))
+            _write(session, lookup, _frame(spark, _row()))
 
             members = client.smembers("line:1:175")
             message = pubsub.get_message(timeout=5.0)
@@ -124,10 +131,10 @@ def test_when_a_scheduled_vehicle_is_written_then_stop_members_carry_the_predict
     lookup = load_lookup(_today_frame(now)).lookup
     scheduled = midnight + timedelta(seconds=(now - midnight).total_seconds() + 300)
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(spark, _row()))
+        _write(session, lookup, _frame(spark, _row()))
         with session.open() as client:
             entries = client.zrange("stop:1002", 0, -1, withscores=True)
 
@@ -151,10 +158,10 @@ def test_when_a_vehicle_pings_twice_then_only_the_newer_update_is_written(
     newer = datetime.now(ZoneInfo(_TIMEZONE))
     older = newer - timedelta(seconds=30)
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(
+        _write(session, lookup, _frame(
             spark,
             _row(**{TripMatchCol.API_TS.value: older, TripMatchCol.DELAY_SEC.value: 10.0}),
             _row(**{TripMatchCol.API_TS.value: newer, TripMatchCol.DELAY_SEC.value: 20.0}),
@@ -174,10 +181,10 @@ def test_when_a_row_is_invalid_then_nothing_is_written_for_it(
     lookup = load_lookup(timetable_frame).lookup
     stale = datetime.now(ZoneInfo(_TIMEZONE)) - timedelta(minutes=10)
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(
+        _write(session, lookup, _frame(
             spark,
             _row(**{TripMatchCol.LINE.value: None}),
             _row(**{TripMatchCol.API_TS.value: stale, TripMatchCol.VEHICLE_NUMBER.value: "2002"}),
@@ -196,10 +203,10 @@ def test_when_a_row_is_unmatched_then_it_is_not_written(
 ) -> None:
     lookup = load_lookup(timetable_frame).lookup
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(
+        _write(session, lookup, _frame(
             spark,
             _row(**{TripMatchCol.MATCH_STATUS.value: MatchStatus.UNMATCHED.value}),
         ))
@@ -218,11 +225,11 @@ def test_when_a_stop_holds_stale_members_then_cleanup_drops_them(
     lookup = load_lookup(_today_frame(now)).lookup
     stale_score = (now - timedelta(hours=1)).timestamp()
 
-    with RedisSession(redis_config) as session:
+    with RedisSession() as session:
         with session.open() as client:
             client.flushdb()
             client.zadd("stop:1002", {"old": stale_score})
-        RedisSink(session, lookup, _TIMEZONE).write(_frame(
+        _write(session, lookup, _frame(
             spark,
             _row(**{TripMatchCol.NEXT_STOP_SEQUENCE.value: 2}),
         ))

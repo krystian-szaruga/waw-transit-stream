@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from datetime import date
 
@@ -8,7 +9,7 @@ from pyspark.sql import SparkSession
 from testcontainers.community.kafka import RedpandaContainer
 from testcontainers.community.redis import RedisContainer
 
-from waw_transit_pipeline.processing.config import KafkaConfig, RedisConfig
+from waw_transit_pipeline.core.config import KafkaConfig
 from waw_transit.core import ReadRepository
 from waw_transit_pipeline.processing.lookup import LookupLoader
 from waw_transit_pipeline.processing.model import VehicleType
@@ -16,7 +17,6 @@ from waw_transit_pipeline.processing.model import VehicleType
 
 class _FrameRepository(ReadRepository):
     def __init__(self, frame: pd.DataFrame, version_id: int = 7) -> None:
-        super().__init__(None)
         self._frame = frame
         self._version_id = version_id
 
@@ -37,20 +37,20 @@ def redpanda() -> Iterator[KafkaConfig]:
             future.result()
         yield KafkaConfig(
             bootstrap_servers=bootstrap,
-            topics=topics,
+            client_id="tests",
             starting_offsets="earliest",
+            topics={VehicleType.BUS.name.lower(): "buses", VehicleType.TRAM.name.lower(): "trams"},
         )
 
 
 @pytest.fixture(scope="session")
-def redis_config() -> Iterator[RedisConfig]:
+def redis_config() -> Iterator[None]:
     with RedisContainer("redis:7-alpine") as container:
-        yield RedisConfig(
-            host=container.get_container_host_ip(),
-            port=int(container.get_exposed_port(6379)),
-            password="",
-            db=0,
-        )
+        os.environ["REDIS_HOST"] = container.get_container_host_ip()
+        os.environ["REDIS_PORT"] = str(container.get_exposed_port(6379))
+        os.environ["REDIS_PASSWORD"] = ""
+        os.environ["REDIS_DB"] = "0"
+        yield
 
 
 @pytest.fixture(scope="session")

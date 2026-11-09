@@ -6,7 +6,7 @@ import psycopg2.extensions as ext
 import pytest
 from psycopg2 import sql
 
-from waw_transit.core.repository.provider import Provider
+from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 from waw_transit.database.postgres.repository import timetable_reader as reader_module
 from waw_transit.database.postgres.repository import timetable_writer as writer_module
