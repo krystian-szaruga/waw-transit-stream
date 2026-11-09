@@ -11,7 +11,7 @@ from waw_transit_backend.application.services import (
 
 
 def get_vehicle_service(request: Request) -> VehicleService:
-    pass
+    return request.app.state.container.vehicle_service
 
 
 def get_stop_service(request: Request) -> StopService:
@@ -19,8 +19,8 @@ def get_stop_service(request: Request) -> StopService:
 
 
 def get_departure_service(request: Request) -> DepartureService:
-    pass
+    return request.app.state.container.departure_service
 
 
 def get_line_service(request: Request) -> LineService:
-    pass
+    return request.app.state.container.line_service

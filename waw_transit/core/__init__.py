@@ -1,5 +1,5 @@
 from .errors import RepositoryError
-from .models import LiveStateBatch, Payload, ResourceState, StopDeparture, VehicleSnapshot
+from .models import LiveStateBatch, Payload, ResourceState, StopDeparture, StopDepartureRecord, VehicleSnapshot
 from .ports.repository import (
     Provider,
     ProviderReadRepository,
@@ -25,5 +25,6 @@ __all__ = [
     "RepositoryError",
     "LiveStateBatch",
     "StopDeparture",
+    "StopDepartureRecord",
     "VehicleSnapshot",
 ]

@@ -2,20 +2,58 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from waw_transit.core import ReadRepository
-from waw_transit_backend.domain import VehicleView
+from waw_transit.core import ReadRepository, VehicleSnapshot
+from waw_transit.core.models.static_state import TripStop
+from waw_transit_backend.domain import NotFoundError, VehicleView
 
 
 class VehicleService:
 
-    def __init__(self, live_state: ReadRepository, timetable: ReadRepository) -> None:
-        pass
+    def __init__(
+        self,
+        all_vehicles: ReadRepository[None, Sequence[VehicleSnapshot]],
+        line_vehicles: ReadRepository[tuple[int, str], Sequence[VehicleSnapshot]],
+        vehicle_by_id: ReadRepository[str, VehicleSnapshot | None],
+        trip_stops: ReadRepository[str, Sequence[TripStop]],
+    ) -> None:
+        self._all_vehicles = all_vehicles
+        self._line_vehicles = line_vehicles
+        self._vehicle_by_id = vehicle_by_id
+        self._trip_stops = trip_stops
 
     def all(self) -> Sequence[VehicleView]:
-        pass
+        return tuple(self._to_view(snapshot) for snapshot in self._all_vehicles.load(None))
 
     def by_line(self, vehicle_type: int, line: str) -> Sequence[VehicleView]:
-        pass
+        return tuple(
+            self._to_view(snapshot)
+            for snapshot in self._line_vehicles.load((vehicle_type, line))
+        )
 
     def get(self, vehicle_id: str) -> VehicleView:
-        pass
+        snapshot: VehicleSnapshot | None = self._vehicle_by_id.load(vehicle_id)
+        if snapshot is None:
+            raise NotFoundError(f"Vehicle {vehicle_id} not found")
+        return self._to_view(snapshot)
+
+    def _to_view(self, snapshot: VehicleSnapshot) -> VehicleView:
+        return VehicleView(
+            id=snapshot.vehicle_id,
+            type=snapshot.vehicle_type,
+            number=snapshot.vehicle_number,
+            line=snapshot.line,
+            brigade=snapshot.brigade,
+            trip_id=snapshot.trip_id,
+            delay_sec=snapshot.delay,
+            status=snapshot.match_status,
+            next_stop=self._next_stop(snapshot),
+            lat=snapshot.lat,
+            lon=snapshot.lon,
+        )
+
+    def _next_stop(self, snapshot: VehicleSnapshot) -> str | None:
+        stops: Sequence[TripStop] = self._trip_stops.load(snapshot.trip_id)
+        return next(
+            (stop.name for stop in stops if stop.sequence == snapshot.next_sequence),
+            None,
+        )

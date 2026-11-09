@@ -8,7 +8,7 @@ from waw_transit_backend.adapters.inbound.http.dependencies import (
 )
 from waw_transit_backend.adapters.inbound.http.schemas import DepartureResponse, StopResponse
 from waw_transit_backend.application.services import DepartureService, StopService
-from waw_transit_backend.domain import StopView
+from waw_transit_backend.domain import DepartureView, StopView
 
 router = APIRouter(prefix="/stops", tags=["stops"])
 
@@ -35,7 +35,10 @@ def list_departures(
     limit: int = Query(20, ge=1),
     service: DepartureService = Depends(get_departure_service),
 ) -> list[DepartureResponse]:
-    pass
+    return [
+        _to_departure_response(departure)
+        for departure in service.for_stop(stop_id, limit)
+    ]
 
 
 def _to_response(stop: StopView) -> StopResponse:
@@ -44,4 +47,17 @@ def _to_response(stop: StopView) -> StopResponse:
         name=stop.name,
         lat=stop.lat,
         lon=stop.lon,
+    )
+
+
+def _to_departure_response(departure: DepartureView) -> DepartureResponse:
+    return DepartureResponse(
+        stop_id=departure.stop_id,
+        line=departure.line,
+        direction=departure.direction,
+        vehicle_id=departure.vehicle_id,
+        scheduled=departure.scheduled,
+        predicted=departure.predicted,
+        minutes=departure.minutes,
+        delay_sec=departure.delay_sec,
     )
