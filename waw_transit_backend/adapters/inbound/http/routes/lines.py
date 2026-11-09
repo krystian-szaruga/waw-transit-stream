@@ -8,7 +8,7 @@ from waw_transit_backend.adapters.inbound.http.dependencies import (
 )
 from waw_transit_backend.adapters.inbound.http.schemas import LineResponse, VehicleResponse
 from waw_transit_backend.application.services import LineService, VehicleService
-from waw_transit_backend.domain import LineView
+from waw_transit_backend.domain import LineView, VehicleView
 
 router = APIRouter(tags=["lines"])
 
@@ -24,8 +24,27 @@ def list_line_vehicles(
     line: str,
     service: VehicleService = Depends(get_vehicle_service),
 ) -> list[VehicleResponse]:
-    pass
+    return [
+        _to_vehicle_response(vehicle)
+        for vehicle in service.by_line(vehicle_type, line)
+    ]
 
 
 def _to_response(line: LineView) -> LineResponse:
     return LineResponse(name=line.name, vehicle_type=line.vehicle_type)
+
+
+def _to_vehicle_response(vehicle: VehicleView) -> VehicleResponse:
+    return VehicleResponse(
+        id=vehicle.id,
+        type=vehicle.type,
+        number=vehicle.number,
+        line=vehicle.line,
+        brigade=vehicle.brigade,
+        trip_id=vehicle.trip_id,
+        delay_sec=vehicle.delay_sec,
+        status=vehicle.status,
+        next_stop=vehicle.next_stop,
+        lat=vehicle.lat,
+        lon=vehicle.lon,
+    )

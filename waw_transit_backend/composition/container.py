@@ -6,7 +6,12 @@ from waw_transit.database.postgres.repository.stop_reader import (
     create_all_stops_reader,
     create_stop_reader,
 )
-from waw_transit.database.postgres.repository.trip_reader import create_lines_reader
+from waw_transit.database.postgres.repository.trip_reader import create_lines_reader, create_trip_reader
+from waw_transit.database.redis.vehicle_reader import (
+    create_all_vehicles_reader,
+    create_line_vehicles_reader,
+    create_vehicle_reader,
+)
 from waw_transit_backend.application.services import (
     DepartureService,
     LineService,
@@ -27,7 +32,12 @@ class AppContainer:
 
 def create_container() -> AppContainer:
     return AppContainer(
-        vehicle_service=None,
+        vehicle_service=VehicleService(
+            create_all_vehicles_reader(),
+            create_line_vehicles_reader(),
+            create_vehicle_reader(),
+            create_trip_reader(),
+        ),
         stop_service=StopService(create_all_stops_reader(), create_stop_reader()),
         departure_service=None,
         line_service=LineService(create_lines_reader()),
