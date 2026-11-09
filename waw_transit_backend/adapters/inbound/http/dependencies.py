@@ -15,7 +15,7 @@ def get_vehicle_service(request: Request) -> VehicleService:
 
 
 def get_stop_service(request: Request) -> StopService:
-    pass
+    return request.app.state.container.stop_service
 
 
 def get_departure_service(request: Request) -> DepartureService:

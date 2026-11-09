@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from waw_transit.database.postgres.repository.stop_reader import (
+    create_all_stops_reader,
+    create_stop_reader,
+)
 from waw_transit_backend.application.services import (
     DepartureService,
     LineService,
@@ -21,4 +25,10 @@ class AppContainer:
 
 
 def create_container() -> AppContainer:
-    pass
+    return AppContainer(
+        vehicle_service=None,
+        stop_service=StopService(create_all_stops_reader(), create_stop_reader()),
+        departure_service=None,
+        line_service=None,
+        live_feed_service=None,
+    )
