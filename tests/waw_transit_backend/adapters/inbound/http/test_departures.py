@@ -10,6 +10,9 @@ def test_when_listing_departures_then_schedule_and_vehicle_details_are_exposed(
     departure = response.json()[0]
     assert departure["stop_id"] == "1002"
     assert departure["line"] == "175"
+    assert departure["trip_id"] == "t1"
+    assert departure["stop_sequence"] == 2
+    assert departure["live"] is True
     assert departure["direction"] == "Centrum"
     assert departure["vehicle_id"] == "1:2001"
     assert departure["scheduled"] == "2026-11-10T12:05:00+01:00"

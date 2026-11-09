@@ -31,6 +31,7 @@ class Schema:
         TripMatchCol.LON: DoubleType(),
         TripMatchCol.LAT: DoubleType(),
         TripMatchCol.NEXT_STOP_SEQUENCE: LongType(),
+        TripMatchCol.NEXT_STOP: StringType(),
     }
 
     @staticmethod

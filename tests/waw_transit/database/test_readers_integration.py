@@ -84,6 +84,7 @@ def test_when_reading_a_vehicle_then_every_hash_field_is_mapped(redis_store: Non
         lat=52.23,
         lon=21.0,
         match_status="MATCHED",
+        next_stop="Centrum",
     )
 
 

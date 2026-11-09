@@ -31,12 +31,23 @@ class LineResponse(BaseModel):
     vehicle_type: int
 
 
+class TripStopResponse(BaseModel):
+    sequence: int
+    name: str
+    scheduled: datetime
+
+
 class DepartureResponse(BaseModel):
     stop_id: str
     line: str
     direction: str
-    vehicle_id: str
+    trip_id: str
+    stop_sequence: int
+    vehicle_next_sequence: int | None
+    vehicle_id: str | None
     scheduled: datetime
-    predicted: datetime
+    predicted: datetime | None
+    scheduled_minutes: int
     minutes: int
-    delay_sec: float
+    delay_sec: float | None
+    live: bool

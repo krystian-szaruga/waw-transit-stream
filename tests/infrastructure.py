@@ -131,6 +131,7 @@ VEHICLE_2001 = {
     "api_timestamp": API_TIMESTAMP.isoformat(),
     "gtfs_version": "2",
     "next_stop_sequence": "2",
+    "next_stop": "Centrum",
 }
 
 VEHICLE_3001 = {
@@ -144,6 +145,7 @@ VEHICLE_3001 = {
     "api_timestamp": API_TIMESTAMP.isoformat(),
     "gtfs_version": "2",
     "next_stop_sequence": "1",
+    "next_stop": "Rondo Daszyńskiego",
 }
 
 DEPARTURE_MEMBER = {

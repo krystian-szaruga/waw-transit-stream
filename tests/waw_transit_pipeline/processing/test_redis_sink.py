@@ -39,6 +39,7 @@ def _row(**overrides) -> dict[str, object]:
         TripMatchCol.LON.value: 21.0,
         TripMatchCol.LAT.value: 52.23,
         TripMatchCol.NEXT_STOP_SEQUENCE.value: 1,
+        TripMatchCol.NEXT_STOP.value: "End",
     }
     values.update(overrides)
     return values

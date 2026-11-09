@@ -12,6 +12,7 @@ _VERSION = 10
 _LON = 11
 _LAT = 12
 _NEXT_STOP = 13
+_NEXT_STOP_NAME = 14
 
 
 def _ping(timestamp: str, lon: float, lat: float = 52.25, line: str = "9") -> dict:
@@ -97,6 +98,7 @@ def test_when_the_ping_moves_along_the_trip_then_the_next_stop_is_the_segment_en
     row = _match(lookup, _ping("2026-11-04 08:05:00", lon=21.025))
 
     assert row[_NEXT_STOP] == 2
+    assert row[_NEXT_STOP_NAME] == "Rondo"
 
 
 def test_when_the_ping_is_unmatched_then_there_is_no_next_stop(load_lookup, timetable_frame):
@@ -105,3 +107,4 @@ def test_when_the_ping_is_unmatched_then_there_is_no_next_stop(load_lookup, time
     row = _match(lookup, _ping("2026-11-04 08:05:00", lon=21.5))
 
     assert row[_NEXT_STOP] is None
+    assert row[_NEXT_STOP_NAME] is None

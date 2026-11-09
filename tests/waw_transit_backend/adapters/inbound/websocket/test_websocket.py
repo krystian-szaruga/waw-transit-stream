@@ -19,6 +19,7 @@ VEHICLE_UPDATE = {
     "api_timestamp": "2026-11-10T12:00:00+01:00",
     "gtfs_version": "2",
     "next_stop_sequence": "2",
+    "next_stop": "Centrum",
 }
 
 

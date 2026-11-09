@@ -124,6 +124,7 @@ class _VehicleCommands:
             "api_timestamp": vehicle.timestamp.isoformat(),
             "gtfs_version": str(vehicle.gtfs_version),
             "next_stop_sequence": str(vehicle.next_sequence),
+            "next_stop": vehicle.next_stop or "",
         }
 
     @staticmethod

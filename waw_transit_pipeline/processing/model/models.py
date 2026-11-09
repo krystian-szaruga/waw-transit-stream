@@ -36,6 +36,7 @@ class TripMatchCol(StrEnum):
     LON = "lon"
     LAT = "lat"
     NEXT_STOP_SEQUENCE = "next_stop_sequence"
+    NEXT_STOP = "next_stop"
 
 class VehicleType(IntEnum):
     BUS = 1
