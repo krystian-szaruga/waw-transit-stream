@@ -56,10 +56,20 @@ jobs:
         working-directory: infra
         run: ./up.sh
 
-      - name: Check frontend and API
+      - name: Check frontend
+        run: curl -sf http://localhost:8080/ | grep -q 'Warsaw Transit'
+
+      - name: Wait for API
         run: |
-          curl -sf http://localhost:8080/ | grep -q 'Warsaw Transit'
-          curl -sf 'http://localhost:8080/api/stops' | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) > 0'
+          for attempt in $(seq 1 60); do
+            if body=$(curl -sf http://localhost:8080/api/stops) && echo "$body" | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) > 0'; then
+              echo "stops available"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API did not return stops after 5 minutes"
+          exit 1
 
       - name: Wait for live vehicles
         run: |
