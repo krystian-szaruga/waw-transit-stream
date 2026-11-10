@@ -235,6 +235,7 @@ function App() {
                 ourSequence={ourSequence}
                 vehicle={tripVehicle}
                 color={selectedTrip.color}
+                delaySec={selectedTrip.live ? selectedTrip.delaySec : null}
               />
             )}
           </div>

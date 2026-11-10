@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { divIcon } from 'leaflet'
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import type { ShapePoint, TripStop, Vehicle } from './api'
+import { formatTime } from './format'
 import { stopPhase } from './stops'
 import { MAP_COLORS } from './theme'
 
@@ -54,6 +55,7 @@ export function MapPanel({
   ourSequence,
   vehicle,
   color,
+  delaySec,
 }: {
   tripId: string
   shape: ShapePoint[]
@@ -62,6 +64,7 @@ export function MapPanel({
   ourSequence: number | null
   vehicle: Vehicle | null
   color: string
+  delaySec: number | null
 }) {
   const positions: [number, number][] =
     shape.length > 1
@@ -101,7 +104,7 @@ export function MapPanel({
             <CircleMarker
               key={`${stop.sequence}-${stop.name}`}
               center={[stop.lat, stop.lon]}
-              radius={ours || current ? 9 : 6}
+              radius={ours || current ? 11 : 8}
               pathOptions={{
                 color: strokeColor,
                 fillColor: stopColor,
@@ -110,6 +113,19 @@ export function MapPanel({
               }}
             >
               <Tooltip>{ours ? `${stop.name} (your stop)` : stop.name}</Tooltip>
+              <Popup>
+                <div className="stop-popup">
+                  <strong>{stop.name}</strong>
+                  <span>
+                    Scheduled: {formatTime(stop.scheduled)}
+                    {delaySec !== null
+                      ? ` · Live: ${formatTime(
+                          new Date(new Date(stop.scheduled).getTime() + delaySec * 1000).toISOString(),
+                        )}`
+                      : ''}
+                  </span>
+                </div>
+              </Popup>
             </CircleMarker>
           )
         })}

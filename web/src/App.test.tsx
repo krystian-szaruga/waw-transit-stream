@@ -21,6 +21,7 @@ vi.mock('react-leaflet', () => ({
     </div>
   ),
   Tooltip: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Popup: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   useMap: () => ({ setView: () => {}, fitBounds: () => {} }),
 }))
 

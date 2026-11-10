@@ -613,3 +613,20 @@ button {
     align-items: flex-start;
   }
 }
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--c-surface);
+  color: var(--c-text);
+}
+
+.stop-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.stop-popup span {
+  color: var(--c-text-muted);
+}
