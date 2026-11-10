@@ -35,6 +35,14 @@ class TripStopResponse(BaseModel):
     sequence: int
     name: str
     scheduled: datetime
+    lat: float
+    lon: float
+
+
+class ShapePointResponse(BaseModel):
+    sequence: int
+    lat: float
+    lon: float
 
 
 class DepartureResponse(BaseModel):

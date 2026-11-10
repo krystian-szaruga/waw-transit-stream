@@ -31,5 +31,19 @@ CREATE TABLE IF NOT EXISTS static_timetable (
      PRIMARY KEY (gtfs_version, service_date, trip_id, stop_sequence)
  );
 
-CREATE INDEX idx_timetable_matching
-    ON static_timetable (gtfs_version, service_date, vehicle_type, line, brigade);
+CREATE TABLE IF NOT EXISTS gtfs_trip_shapes (
+     gtfs_version BIGINT NOT NULL REFERENCES gtfs_versions(version_id),
+     trip_id VARCHAR(50) NOT NULL,
+     shape_id VARCHAR(50) NOT NULL,
+     PRIMARY KEY (gtfs_version, trip_id)
+ );
+
+CREATE TABLE IF NOT EXISTS gtfs_shapes (
+     gtfs_version BIGINT NOT NULL REFERENCES gtfs_versions(version_id),
+     shape_id VARCHAR(50) NOT NULL,
+     point_sequence INT NOT NULL,
+     lat DOUBLE PRECISION NOT NULL,
+     lon DOUBLE PRECISION NOT NULL,
+     PRIMARY KEY (gtfs_version, shape_id, point_sequence)
+ );
+

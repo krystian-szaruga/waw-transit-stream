@@ -1,10 +1,11 @@
 from .live_state import LiveStateBatch, StopDeparture, StopDepartureRecord, VehicleSnapshot
-from .payload import Payload
+from .payload import GtfsPayload, Payload
 from .resource_state import ResourceState
 from .static_state import (
     LineInfo,
     ScheduleQuery,
     ScheduledDeparture,
+    ShapePoint,
     StopInfo,
     TripStop,
     TripStopsQuery,
@@ -12,12 +13,14 @@ from .static_state import (
 )
 
 __all__ = [
+    "GtfsPayload",
     "LineInfo",
     "LiveStateBatch",
     "Payload",
     "ResourceState",
     "ScheduleQuery",
     "ScheduledDeparture",
+    "ShapePoint",
     "StopDeparture",
     "StopDepartureRecord",
     "StopInfo",

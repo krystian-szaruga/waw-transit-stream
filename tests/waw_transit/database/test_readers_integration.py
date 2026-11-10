@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from waw_transit.core import VehicleSnapshot
-from waw_transit.core.models.static_state import LineInfo, StopInfo, TripStop
+from waw_transit.core.models.static_state import LineInfo, ShapePoint, StopInfo, TripStop
+from waw_transit.database.postgres.repository.trip_shape import create_trip_shape_reader
 from waw_transit.database.postgres.repository.stop_reader import (
     create_all_stops_reader,
     create_stop_reader,
@@ -52,6 +53,21 @@ def test_when_reading_lines_then_distinct_lines_of_the_active_version_are_return
     lines = create_lines_reader().load()
 
     assert lines == (LineInfo("175", 1), LineInfo("9", 2))
+
+
+def test_when_reading_a_trip_shape_then_points_of_the_active_version_come_in_order(
+    postgres: None,
+) -> None:
+    shape = create_trip_shape_reader().load("t1")
+
+    assert shape == (
+        ShapePoint(0, 52.2300, 20.9900),
+        ShapePoint(1, 52.2310, 20.9910),
+    )
+
+
+def test_when_reading_a_shape_of_an_unknown_trip_then_it_is_empty(postgres: None) -> None:
+    assert create_trip_shape_reader().load("unknown") == ()
 
 
 def test_when_reading_all_vehicles_then_hashes_are_mapped_to_snapshots(

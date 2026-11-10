@@ -6,7 +6,7 @@ import pandas as pd
 from psycopg2 import sql
 from psycopg2._psycopg import cursor
 
-from waw_transit.core import SaveRepository, Payload, ProviderSaveRepository
+from waw_transit.core import GtfsPayload, ProviderSaveRepository, SaveRepository
 from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
@@ -15,11 +15,15 @@ def create_timetable_writer(
         schema: str = "public",
         table: str = "static_timetable",
         versions_table: str = "gtfs_versions",
-) -> SaveRepository[Payload[pd.DataFrame], int]:
-    return _TimetableWriter(create_provider(), schema, table, versions_table)
+        trip_shapes_table: str = "gtfs_trip_shapes",
+        shape_points_table: str = "gtfs_shapes",
+) -> SaveRepository[GtfsPayload[pd.DataFrame], int]:
+    return _TimetableWriter(
+        create_provider(), schema, table, versions_table, trip_shapes_table, shape_points_table
+    )
 
 
-class _TimetableWriter(ProviderSaveRepository[cursor, Payload[pd.DataFrame], int]):
+class _TimetableWriter(ProviderSaveRepository[cursor, GtfsPayload[pd.DataFrame], int]):
     _KEEP_RETIRED = 3
 
     def __init__(
@@ -28,19 +32,25 @@ class _TimetableWriter(ProviderSaveRepository[cursor, Payload[pd.DataFrame], int
             schema: str = "public",
             table: str = "static_timetable",
             versions_table: str = "gtfs_versions",
+            trip_shapes_table: str = "gtfs_trip_shapes",
+            shape_points_table: str = "gtfs_shapes",
     ) -> None:
         super().__init__(provider)
         self._table = sql.Identifier(schema, table)
         self._versions = sql.Identifier(schema, versions_table)
+        self._trip_shapes = sql.Identifier(schema, trip_shapes_table)
+        self._shape_points = sql.Identifier(schema, shape_points_table)
 
     @override
-    def save(self, frame: Payload[pd.DataFrame]) -> int:
+    def save(self, frame: GtfsPayload[pd.DataFrame]) -> int:
         with self._provider.open() as cur:
             known = self._version_id(cur, frame.sha256)
             if known is not None:
                 return known
             version_id = self._insert_version(cur, frame.sha256)
-            self._copy(cur, self._to_csv_buffer(frame.frame, version_id), ["gtfs_version", *frame.frame.columns])
+            self._copy_frame(cur, self._table, frame.timetable, version_id)
+            self._copy_frame(cur, self._trip_shapes, frame.trip_shapes, version_id)
+            self._copy_frame(cur, self._shape_points, frame.shape_points, version_id)
             self._activate(cur, version_id)
             self._prune(cur, self._KEEP_RETIRED)
             return version_id
@@ -63,19 +73,27 @@ class _TimetableWriter(ProviderSaveRepository[cursor, Payload[pd.DataFrame], int
 
     @staticmethod
     def _to_csv_buffer(data: pd.DataFrame, version_id: int) -> io.StringIO:
-        export = data.assign(
-            gtfs_version=version_id,
-            service_date=data["service_date"].map(date.isoformat),
-        )[["gtfs_version", *data.columns]]
+        export = data.assign(gtfs_version=version_id)
+        if "service_date" in export.columns:
+            export = export.assign(service_date=export["service_date"].map(date.isoformat))
+        export = export[["gtfs_version", *data.columns]]
         buffer = io.StringIO()
         export.to_csv(buffer, index=False, header=False)
         buffer.seek(0)
         return buffer
 
-    def _copy(self, cur, buffer: io.StringIO, columns: list[str]) -> int:
+    def _copy_frame(self, cur: cursor, table: sql.Composable, frame: pd.DataFrame, version_id: int) -> None:
+        self._copy(
+            cur,
+            table,
+            self._to_csv_buffer(frame, version_id),
+            ["gtfs_version", *frame.columns],
+        )
+
+    def _copy(self, cur: cursor, table: sql.Composable, buffer: io.StringIO, columns: list[str]) -> int:
         cur.copy_expert(
             sql.SQL("COPY {tbl} ({cols}) FROM STDIN WITH (FORMAT csv)")
-            .format(tbl=self._table, cols=self._identifiers(columns))
+            .format(tbl=table, cols=self._identifiers(columns))
             .as_string(cur),
             buffer,
         )
@@ -94,11 +112,12 @@ class _TimetableWriter(ProviderSaveRepository[cursor, Payload[pd.DataFrame], int
 
     def _prune(self, cur, keep_retired: int) -> None:
         kept = self._kept_versions()
-        cur.execute(
-            sql.SQL("DELETE FROM {timetable} WHERE gtfs_version NOT IN ({kept})")
-            .format(timetable=self._table, kept=kept),
-            (keep_retired,),
-        )
+        for table in (self._shape_points, self._trip_shapes, self._table):
+            cur.execute(
+                sql.SQL("DELETE FROM {tbl} WHERE gtfs_version NOT IN ({kept})")
+                .format(tbl=table, kept=kept),
+                (keep_retired,),
+            )
         cur.execute(
             sql.SQL("DELETE FROM {versions} WHERE version_id NOT IN ({kept})")
             .format(versions=self._versions, kept=kept),

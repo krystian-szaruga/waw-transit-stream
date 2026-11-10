@@ -30,6 +30,14 @@ export type TripStop = {
   sequence: number
   name: string
   scheduled: string
+  lat: number
+  lon: number
+}
+
+export type ShapePoint = {
+  sequence: number
+  lat: number
+  lon: number
 }
 
 export type Departure = {
@@ -92,6 +100,10 @@ export async function loadStops(query?: string): Promise<Stop[]> {
 export async function loadTripStops(tripId: string, serviceDate: string): Promise<TripStop[]> {
   const suffix = `?${new URLSearchParams({ date: serviceDate })}`
   return fetchJson<TripStopResponse[]>(`/trips/${encodeURIComponent(tripId)}/stops${suffix}`)
+}
+
+export async function loadTripShape(tripId: string): Promise<ShapePoint[]> {
+  return fetchJson<ShapePointResponse[]>(`/trips/${encodeURIComponent(tripId)}/shape`)
 }
 
 export async function loadDepartures(stopId: string, limit = 20): Promise<Departure[]> {
@@ -171,6 +183,14 @@ type TripStopResponse = {
   sequence: number
   name: string
   scheduled: string
+  lat: number
+  lon: number
+}
+
+type ShapePointResponse = {
+  sequence: number
+  lat: number
+  lon: number
 }
 
 type DepartureResponse = {

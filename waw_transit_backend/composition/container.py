@@ -5,7 +5,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from waw_transit.core import ParameterlessReadRepository
-from waw_transit.database import create_scheduled_departures_reader, create_trip_stops_reader
+from waw_transit.database import (
+    create_scheduled_departures_reader,
+    create_trip_shape_reader,
+    create_trip_stops_reader,
+)
 from waw_transit.database.postgres.repository.stop_reader import (
     create_all_stops_reader,
     create_stop_reader,
@@ -59,7 +63,7 @@ def create_container() -> AppContainer:
         stop_service=StopService(create_all_stops_reader(), create_stop_reader()),
         departure_service=departure_service,
         line_service=LineService(create_lines_reader()),
-        trip_service=TripService(create_trip_stops_reader()),
+        trip_service=TripService(create_trip_stops_reader(), create_trip_shape_reader()),
         live_feed_service=LiveFeedService(
             vehicle_service,
             departure_service,

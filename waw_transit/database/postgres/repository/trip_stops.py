@@ -41,7 +41,7 @@ class _TripStopsReader(ReadRepository[TripStopsQuery, Sequence[TripStopView]]):
         rows = fetch_all(
             cur,
             sql.SQL(
-                "SELECT stop_sequence, stop_name, scheduled_arrival_offset "
+                "SELECT stop_sequence, stop_name, scheduled_arrival_offset, stop_lat, stop_lon "
                 "FROM {tbl} "
                 "WHERE gtfs_version = (SELECT version_id FROM {versions} WHERE status = 'active') "
                 "AND trip_id = %s AND service_date = %s "
@@ -55,6 +55,8 @@ class _TripStopsReader(ReadRepository[TripStopsQuery, Sequence[TripStopView]]):
                 sequence=int(row[0]),
                 name=str(row[1]),
                 scheduled=midnight + timedelta(seconds=int(row[2])),
+                lat=float(row[3]),
+                lon=float(row[4]),
             )
             for row in rows
         )

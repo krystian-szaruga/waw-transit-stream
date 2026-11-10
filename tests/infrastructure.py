@@ -42,6 +42,14 @@ def postgres() -> Iterator[None]:
                     "INSERT INTO static_timetable VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     STOP_ROWS,
                 )
+                cur.executemany(
+                    "INSERT INTO gtfs_trip_shapes VALUES (%s, %s, %s)",
+                    TRIP_SHAPE_ROWS,
+                )
+                cur.executemany(
+                    "INSERT INTO gtfs_shapes VALUES (%s, %s, %s, %s, %s)",
+                    SHAPE_POINT_ROWS,
+                )
         yield
 
 
@@ -105,11 +113,42 @@ SCHEMA_STATEMENTS = (
         PRIMARY KEY (gtfs_version, service_date, trip_id, stop_sequence)
     )
     """,
+    """
+    CREATE TABLE gtfs_trip_shapes (
+        gtfs_version BIGINT NOT NULL REFERENCES gtfs_versions(version_id),
+        trip_id VARCHAR(50) NOT NULL,
+        shape_id VARCHAR(50) NOT NULL,
+        PRIMARY KEY (gtfs_version, trip_id)
+    )
+    """,
+    """
+    CREATE TABLE gtfs_shapes (
+        gtfs_version BIGINT NOT NULL REFERENCES gtfs_versions(version_id),
+        shape_id VARCHAR(50) NOT NULL,
+        point_sequence INT NOT NULL,
+        lat DOUBLE PRECISION NOT NULL,
+        lon DOUBLE PRECISION NOT NULL,
+        PRIMARY KEY (gtfs_version, shape_id, point_sequence)
+    )
+    """,
 )
 
 VERSION_ROWS = (
     (1, "a" * 64, "retired"),
     (2, "b" * 64, "active"),
+)
+
+TRIP_SHAPE_ROWS = (
+    (2, "t1", "SH-T1"),
+    (2, "t2", "SH-T2"),
+    (1, "t1", "SH-OLD"),
+)
+
+SHAPE_POINT_ROWS = (
+    (2, "SH-T1", 0, 52.2300, 20.9900),
+    (2, "SH-T1", 1, 52.2310, 20.9910),
+    (2, "SH-T2", 0, 52.2400, 21.0300),
+    (1, "SH-OLD", 0, 52.0000, 21.0000),
 )
 
 STOP_ROWS = (

@@ -47,7 +47,7 @@ class DepartureService:
             for record in records
         ]
         views.extend(
-            self._scheduled_view(item, now)
+            _scheduled_view(item, now)
             for item in scheduled
             if (item.trip_id, item.stop_sequence) not in live_keys and item.scheduled >= now
         )
@@ -79,24 +79,6 @@ class DepartureService:
             live=True,
         )
 
-    @staticmethod
-    def _scheduled_view(item: ScheduledDeparture, now: datetime) -> DepartureView:
-        return DepartureView(
-            stop_id=item.stop_id,
-            line=item.line,
-            direction=item.direction,
-            trip_id=item.trip_id,
-            stop_sequence=item.stop_sequence,
-            vehicle_next_sequence=None,
-            vehicle_id=None,
-            scheduled=item.scheduled,
-            predicted=None,
-            scheduled_minutes=_minutes((item.scheduled - now).total_seconds()),
-            minutes=_minutes((item.scheduled - now).total_seconds()),
-            delay_sec=None,
-            live=False,
-        )
-
     def _next_sequence(self, vehicle_id: str, positions: dict[str, int | None]) -> int | None:
         if vehicle_id not in positions:
             vehicle = self._vehicles.load(vehicle_id)
@@ -109,6 +91,24 @@ class DepartureService:
             return ""
         return max(stops, key=lambda stop: stop.sequence).name
 
+
+
+def _scheduled_view(item: ScheduledDeparture, now: datetime) -> DepartureView:
+    return DepartureView(
+        stop_id=item.stop_id,
+        line=item.line,
+        direction=item.direction,
+        trip_id=item.trip_id,
+        stop_sequence=item.stop_sequence,
+        vehicle_next_sequence=None,
+        vehicle_id=None,
+        scheduled=item.scheduled,
+        predicted=None,
+        scheduled_minutes=_minutes((item.scheduled - now).total_seconds()),
+        minutes=_minutes((item.scheduled - now).total_seconds()),
+        delay_sec=None,
+        live=False,
+    )
 
 def _moment(view: DepartureView) -> datetime:
     return view.predicted if view.predicted is not None else view.scheduled

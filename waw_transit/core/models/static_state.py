@@ -51,3 +51,12 @@ class TripStopView:
     sequence: int
     name: str
     scheduled: datetime
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True, slots=True)
+class ShapePoint:
+    sequence: int
+    lat: float
+    lon: float
