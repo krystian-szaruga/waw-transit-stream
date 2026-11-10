@@ -6,22 +6,22 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ProviderReadRepository, ReadRepository, RepositoryError
+from waw_transit.core import ParameterlessReadRepository, ProviderParameterlessReadRepository, RepositoryError
 from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
 
 
-def create_version_reader(schema: str = "public") -> ReadRepository[None, int]:
+def create_version_reader(schema: str = "public") -> ParameterlessReadRepository[int]:
     return _VersionReader(create_provider(), schema)
 
 
-class _VersionReader(ProviderReadRepository[cursor, None, int]):
+class _VersionReader(ProviderParameterlessReadRepository[cursor, int]):
     def __init__(self, provider: Provider[cursor], schema: str = "public") -> None:
         super().__init__(provider)
         self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
-    def load(self, payload: None = None) -> int:
+    def load(self) -> int:
         try:
             with self._provider.open() as cur:
                 cur.execute(

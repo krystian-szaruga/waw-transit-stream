@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from waw_transit.core import ReadRepository
+from waw_transit.core import ParameterlessReadRepository, ReadRepository
 from waw_transit.core.models.static_state import StopInfo
 from waw_transit_backend.domain import NotFoundError, StopView
 
@@ -11,14 +11,14 @@ class StopService:
 
     def __init__(
         self,
-        all_stops: ReadRepository[None, Sequence[StopInfo]],
+        all_stops: ParameterlessReadRepository[Sequence[StopInfo]],
         stop_by_id: ReadRepository[str, StopInfo | None],
     ) -> None:
         self._all_stops = all_stops
         self._stop_by_id = stop_by_id
 
     def search(self, query: str | None = None) -> Sequence[StopView]:
-        stops: Sequence[StopInfo] = self._all_stops.load(None)
+        stops: Sequence[StopInfo] = self._all_stops.load()
         if query is None:
             return tuple(_to_view(stop) for stop in stops)
         needle = query.casefold()

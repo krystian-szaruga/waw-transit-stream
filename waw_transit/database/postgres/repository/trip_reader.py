@@ -7,7 +7,12 @@ from typing import override
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ProviderReadRepository, ReadRepository
+from waw_transit.core import (
+    ParameterlessReadRepository,
+    ProviderParameterlessReadRepository,
+    ProviderReadRepository,
+    ReadRepository,
+)
 from waw_transit.core.models.static_state import LineInfo, TripStop
 from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
@@ -24,7 +29,7 @@ def create_trip_reader(
 def create_lines_reader(
     schema: str = "public",
     table: str = "static_timetable",
-) -> ReadRepository[None, Sequence[LineInfo]]:
+) -> ParameterlessReadRepository[Sequence[LineInfo]]:
     return _LinesReader(create_provider(), schema, table)
 
 
@@ -59,7 +64,7 @@ class _TripReader(ProviderReadRepository[cursor, str, Sequence[TripStop]]):
         return trip
 
 
-class _LinesReader(ProviderReadRepository[cursor, None, Sequence[LineInfo]]):
+class _LinesReader(ProviderParameterlessReadRepository[cursor, Sequence[LineInfo]]):
 
     def __init__(
         self,
@@ -72,7 +77,7 @@ class _LinesReader(ProviderReadRepository[cursor, None, Sequence[LineInfo]]):
         self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
-    def load(self, payload: None = None) -> Sequence[LineInfo]:
+    def load(self) -> Sequence[LineInfo]:
         query = sql.SQL(
             "SELECT DISTINCT vehicle_type, line FROM {tbl} "
             "WHERE gtfs_version = (SELECT version_id FROM {versions} WHERE status = 'active') "

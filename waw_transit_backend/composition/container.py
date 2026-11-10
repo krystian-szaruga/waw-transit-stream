@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from waw_transit.core import ReadRepository
+from waw_transit.core import ParameterlessReadRepository
 from waw_transit.database import create_scheduled_departures_reader, create_trip_stops_reader
 from waw_transit.database.postgres.repository.stop_reader import (
     create_all_stops_reader,
@@ -37,7 +37,7 @@ class AppContainer:
     line_service: LineService
     trip_service: TripService
     live_feed_service: LiveFeedService
-    active_version: ReadRepository[None, int | None]
+    active_version: ParameterlessReadRepository[int | None]
 
 
 def create_container() -> AppContainer:

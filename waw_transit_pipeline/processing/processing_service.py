@@ -11,7 +11,7 @@ from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from waw_transit.core import ReadRepository, RepositoryError, SaveRepository, VersionStore
+from waw_transit.core import ReadRepository, RepositoryError, SaveRepository, VersionStore, ParameterlessReadRepository
 from waw_transit_pipeline.core.ports import StreamReader, VersionWatcher
 from waw_transit.core.models import LiveStateBatch
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
@@ -35,7 +35,7 @@ class ProcessingService:
         config: ProcessingConfig,
         sink: SaveRepository[LiveStateBatch, None],
         timetable_reader: ReadRepository,
-        version_reader: ReadRepository,
+        version_reader: ParameterlessReadRepository,
         watcher: VersionWatcher,
         version_store: VersionStore,
         stream_reader: StreamReader[SparkSession, DataFrame],
@@ -133,7 +133,7 @@ class ProcessingService:
                     continue
                 logger.info("Version event %d (loaded %d)", event, version_id)
                 try:
-                    active = self._version_reader.load(None)
+                    active = self._version_reader.load()
                 except RepositoryError as err:
                     logger.error(
                         "Failed to read the active GTFS version; keeping version %d, %s",

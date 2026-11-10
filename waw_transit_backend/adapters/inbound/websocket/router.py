@@ -30,13 +30,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     try:
         message = SubscribeMessage.model_validate(await websocket.receive_json())
         snapshot = await asyncio.to_thread(service.snapshot, message.stop_id, message.line)
-        version = await asyncio.to_thread(container.active_version.load, None)
+        version = await asyncio.to_thread(container.active_version.load)
         sent_version = _log_version(None, version)
         await hub.send(websocket, _snapshot_message(snapshot, version))
         while True:
             items = await queue.get()
             filtered = await asyncio.to_thread(_for_subscription, items, message, service)
-            version = await asyncio.to_thread(container.active_version.load, None)
+            version = await asyncio.to_thread(container.active_version.load)
             sent_version = _log_version(sent_version, version)
             await hub.send(websocket, _update_message(filtered, version))
     except WebSocketDisconnect:
