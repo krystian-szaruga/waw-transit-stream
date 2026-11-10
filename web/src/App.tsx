@@ -1,140 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import type { Departure, Stop, TripStop } from './api'
-import { loadTripStops } from './api'
+import 'leaflet/dist/leaflet.css'
+import type { Departure, ShapePoint, TripStop } from './api'
+import { loadTripShape, loadTripStops } from './api'
+import { DepartureRow } from './DepartureRow'
+import { serviceDate } from './format'
+import { MapPanel } from './MapPanel'
+import { SearchPanel } from './SearchPanel'
+import { groupStops, sameIds, type StopGroup } from './stops'
+import { ThemeToggle } from './ThemeToggle'
+import { TripDetail } from './TripDetail'
 import { useLiveTransit } from './useLiveTransit'
-
-function formatTime(value: string): string {
-  return new Date(value).toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Warsaw',
-  })
-}
-
-function serviceDate(value: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Warsaw',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value))
-}
-
-function formatDelay(delaySec: number | null): string {
-  if (delaySec === null) return 'scheduled'
-  const minutes = Math.round(delaySec / 60)
-  if (minutes === 0) return 'on time'
-  return minutes > 0 ? `delayed +${minutes} min` : `early ${Math.abs(minutes)} min`
-}
-
-function delayClass(delaySec: number | null): string {
-  if (delaySec === null) return 'scheduled'
-  if (delaySec > 120) return 'late'
-  if (delaySec < -60) return 'early'
-  return 'ok'
-}
-
-function minutesLabel(minutes: number): string {
-  if (minutes < 0) return 'departed'
-  return minutes === 0 ? 'now' : `${minutes} min`
-}
-
-function scheduledLabel(item: Departure): string | null {
-  if (item.scheduledMinutes < 0) return null
-  return minutesLabel(item.scheduledMinutes)
-}
-
-function DepartureRow({
-  item,
-  selected,
-  onSelect,
-}: {
-  item: Departure
-  selected: boolean
-  onSelect: (item: Departure) => void
-}) {
-  const predicted = item.predicted
-  const live = predicted !== null
-  return (
-    <li
-      className={`${live ? 'departure live' : 'departure scheduled'} selectable${selected ? ' selected' : ''}`}
-      tabIndex={0}
-      onClick={() => onSelect(item)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect(item)
-        }
-      }}
-    >
-      <span className="line-badge" style={{ background: item.color }}>
-        {item.line}
-      </span>
-      <div className="departure-main">
-        <span className="direction">{item.direction || 'Unknown direction'}</span>
-        <span className="timing">
-          <span className="timing-label">Scheduled:</span> {formatTime(item.scheduled)}
-          {scheduledLabel(item) !== null ? ` (${scheduledLabel(item)})` : ''}
-        </span>
-        {predicted !== null && (
-          <span className="timing live">
-            <span className="timing-label">Live:</span> {formatTime(predicted)}
-            {` (${minutesLabel(item.minutes)})`}
-          </span>
-        )}
-      </div>
-      <span className={`delay ${delayClass(item.delaySec)}`}>
-        {live ? formatDelay(item.delaySec) : 'scheduled'}
-      </span>
-    </li>
-  )
-}
-
-function TripStopItem({
-  stop,
-  state,
-  selected,
-  delaySec,
-}: {
-  stop: TripStop
-  state: 'past' | 'current' | 'future'
-  selected: boolean
-  delaySec: number | null
-}) {
-  const predicted =
-    state === 'past' || delaySec === null
-      ? null
-      : new Date(new Date(stop.scheduled).getTime() + delaySec * 1000)
-  return (
-    <li className={`trip-stop ${state}${selected ? ' selected' : ''}`}>
-      <span className="trip-stop-name">{stop.name}</span>
-      <span className="trip-stop-time">
-        {formatTime(stop.scheduled)}
-        {predicted !== null && <span className="trip-stop-live">{formatTime(predicted.toISOString())}</span>}
-      </span>
-    </li>
-  )
-}
+import { useTheme } from './useTheme'
 
 function App() {
+  const { theme, setTheme } = useTheme()
   const [selectedGroup, setSelectedGroup] = useState<StopGroup | null>(null)
   const [stopQuery, setStopQuery] = useState('')
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [tripStops, setTripStops] = useState<TripStop[]>([])
+  const [tripShape, setTripShape] = useState<ShapePoint[]>([])
   const [tripLoading, setTripLoading] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
   const [showPast, setShowPast] = useState(false)
   const tripDetailRef = useRef<HTMLDivElement | null>(null)
   const stopIds = useMemo(() => selectedGroup?.stopIds ?? [], [selectedGroup])
-  const { stops, departures, departuresLoading, status, error, version } =
+  const { stops, departures, vehicles, departuresLoading, status, error, socketError, version, retry } =
     useLiveTransit(stopIds)
 
   const stopGroups = useMemo(() => groupStops(stops), [stops])
-  const statusHint = [
-    error,
-    version !== null ? `Timetable v${version}` : null,
-  ]
+  const statusHint = [socketError, version !== null ? `Timetable v${version}` : null]
     .filter((item) => item !== null && item !== '')
     .join(' · ')
 
@@ -146,15 +41,7 @@ function App() {
       return sameIds(fresh.stopIds, current.stopIds) ? current : fresh
     })
   }, [stopGroups])
-  const matchingStops = useMemo(
-    () =>
-      stopQuery.trim() === ''
-        ? []
-        : stopGroups
-            .filter((item) => item.name.toLowerCase().includes(stopQuery.trim().toLowerCase()))
-            .slice(0, 20),
-    [stopQuery, stopGroups],
-  )
+
   const sortedDepartures = useMemo(
     () =>
       [...departures].sort(
@@ -166,34 +53,18 @@ function App() {
     selectedTripId === null
       ? null
       : sortedDepartures.find((item) => item.tripId === selectedTripId) ?? null
-  const referenceSequence =
-    selectedTrip === null
-      ? null
-      : selectedTrip.vehicleNextSequence ?? selectedTrip.stopSequence
-  const pastStops = useMemo(
-    () =>
-      referenceSequence === null
-        ? []
-        : tripStops.filter((stop) => stop.sequence < referenceSequence),
-    [tripStops, referenceSequence],
-  )
-  const currentStop =
-    referenceSequence === null
-      ? null
-      : tripStops.find((stop) => stop.sequence === referenceSequence) ?? null
-  const futureStops = useMemo(
-    () =>
-      referenceSequence === null
-        ? []
-        : tripStops.filter((stop) => stop.sequence > referenceSequence),
-    [tripStops, referenceSequence],
-  )
-  const liveDelay = selectedTrip?.live ? selectedTrip.delaySec : null
-  const firstStop = tripStops.length > 0 ? tripStops[0] : null
-  const hiddenPastStops = pastStops.filter((stop) => stop.sequence !== firstStop?.sequence)
-
-  const selectedTripDate =
-    selectedTrip === null ? null : serviceDate(selectedTrip.scheduled)
+  const referenceSequence = selectedTrip === null ? null : selectedTrip.vehicleNextSequence
+  const ourSequence = selectedTrip === null ? null : selectedTrip.stopSequence
+  const tripVehicle = useMemo(() => {
+    if (selectedTripId === null) return null
+    const vehicleId = selectedTrip?.vehicleId ?? null
+    return (
+      vehicles.find((item) => vehicleId !== null && item.id === vehicleId) ??
+      vehicles.find((item) => item.tripId === selectedTripId) ??
+      null
+    )
+  }, [vehicles, selectedTripId, selectedTrip?.vehicleId])
+  const selectedTripDate = selectedTrip === null ? null : serviceDate(selectedTrip.scheduled)
 
   useEffect(() => {
     if (selectedTripId === null || selectedTripDate === null) return
@@ -216,8 +87,28 @@ function App() {
   }, [selectedTripId, selectedTripDate])
 
   useEffect(() => {
+    if (selectedTripId === null) return
+    let cancelled = false
+    setTripShape([])
+    loadTripShape(selectedTripId)
+      .then((items) => {
+        if (!cancelled) setTripShape(items)
+      })
+      .catch(() => {
+        if (!cancelled) setTripShape([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTripId])
+
+  useEffect(() => {
     const element = tripDetailRef.current
-    if (selectedTripId !== null && element !== null && typeof element.scrollIntoView === 'function') {
+    if (
+      selectedTripId !== null &&
+      element !== null &&
+      typeof element.scrollIntoView === 'function'
+    ) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [selectedTripId])
@@ -245,172 +136,132 @@ function App() {
           <button type="button" className="tab active">
             Live departures
           </button>
-          <button type="button" className="tab" disabled title="Coming soon">
-            Timetable
-          </button>
-          <button type="button" className="tab" disabled title="Coming soon">
-            Routes
-          </button>
-          <button type="button" className="tab" disabled title="Coming soon">
-            Map
-          </button>
         </nav>
 
-        <div className="status" title={statusHint}>
-          <span className={status === 'live' ? 'dot' : 'dot offline'} />
-          {status}
+        <div className="topbar-actions">
+          <ThemeToggle theme={theme} onChange={setTheme} />
+          <div className="status" title={statusHint}>
+            <span className={status === 'live' ? 'dot' : 'dot offline'} />
+            {status}
+          </div>
         </div>
       </header>
 
       <main className="content">
-        <section className="search-panel">
-          <div className="search">
-            <input
-              type="search"
-              placeholder="Search stop"
-              aria-label="Search stop"
-              value={stopQuery}
-              onChange={(event) => setStopQuery(event.target.value)}
-            />
-            {matchingStops.length > 0 && (
-              <ul className="search-results" aria-label="Stop results">
-                {matchingStops.map((item) => (
-                  <li key={item.name}>
-                    <button type="button" onClick={() => selectStop(item)}>
-                      {item.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        {error && (
-          <div className="error-banner" role="alert">
-            {error}
-          </div>
-        )}
+        <SearchPanel
+          query={stopQuery}
+          groups={stopGroups}
+          onQueryChange={setStopQuery}
+          onSelect={selectStop}
+        />
 
         {selectedGroup === null ? (
-          <section className="empty">
-            <h1>Live departures</h1>
-            <p>Select a stop to see upcoming departures.</p>
-          </section>
-        ) : (
-          <section className="board">
-            <div className="board-header">
-              <div>
-                <h1>{selectedGroup.name}</h1>
-                <p className="muted">
-                  Upcoming departures
-                  {selectedGroup.stopIds.length > 1
-                    ? ` · ${selectedGroup.stopIds.length} platforms`
-                    : ''}
-                </p>
-              </div>
-              <button type="button" className="back" onClick={() => {
-                  setSelectedGroup(null)
-                  setSelectedTripId(null)
-                }}>
-                ← Change stop
+          error !== null ? (
+            <section className="error-card" role="alert">
+              <h2>Could not load transit data</h2>
+              <p className="muted">{error}</p>
+              <button type="button" className="back" onClick={retry}>
+                Retry
               </button>
-            </div>
+            </section>
+          ) : (
+            <section className="empty">
+              <h1>Live departures</h1>
+              <p>Select a stop to see upcoming departures.</p>
+            </section>
+          )
+        ) : (
+          <div className={selectedTrip === null ? 'workspace' : 'workspace with-map'}>
+            <section className="board">
+              <div className="board-header">
+                <div>
+                  <h1>{selectedGroup.name}</h1>
+                  <p className="muted">
+                    Upcoming departures
+                    {selectedGroup.stopIds.length > 1
+                      ? ` · ${selectedGroup.stopIds.length} platforms`
+                      : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="back"
+                  onClick={() => {
+                    setSelectedGroup(null)
+                    setSelectedTripId(null)
+                  }}
+                >
+                  ← Change stop
+                </button>
+              </div>
 
-            {selectedTrip !== null && (
-              <div className="trip-detail" ref={tripDetailRef}>
-                <div className="trip-detail-header">
-                  <h2>
-                    {selectedTrip.line} → {selectedTrip.direction}
-                  </h2>
-                  <button type="button" className="back" onClick={() => setSelectedTripId(null)}>
-                    Close
+              {selectedTrip !== null && (
+                <TripDetail
+                  departure={selectedTrip}
+                  stops={tripStops}
+                  loading={tripLoading}
+                  error={tripError}
+                  referenceSequence={referenceSequence}
+                  stopName={selectedGroup.name}
+                  showPast={showPast}
+                  onTogglePast={() => setShowPast((value) => !value)}
+                  onClose={() => setSelectedTripId(null)}
+                  containerRef={tripDetailRef}
+                />
+              )}
+
+              {departuresLoading ? (
+                <div className="loading" role="status">
+                  <span className="spinner" />
+                  Loading departures…
+                </div>
+              ) : error !== null && sortedDepartures.length === 0 ? (
+                <div className="error-card inline" role="alert">
+                  <p className="muted">{error}</p>
+                  <button type="button" className="back" onClick={retry}>
+                    Retry
                   </button>
                 </div>
-                {tripLoading ? (
-                  <div className="loading" role="status">
-                    <span className="spinner" />
-                    Loading trip stops…
-                  </div>
-                ) : tripError !== null ? (
-                  <p className="empty-row">{tripError}</p>
-                ) : (
-                  <ol className="trip-stops" aria-label="Trip stops">
-                    {firstStop !== null &&
-                      referenceSequence !== null &&
-                      firstStop.sequence < referenceSequence && (
-                        <TripStopItem
-                          key={`${firstStop.sequence}-${firstStop.name}`}
-                          stop={firstStop}
-                          state="past"
-                          selected={firstStop.sequence === selectedTrip?.stopSequence}
-                          delaySec={liveDelay}
-                        />
-                      )}
-                    {hiddenPastStops.length > 0 && (
-                      <li className="trip-stop past-toggle">
-                        <button
-                          type="button"
-                          className="past-button"
-                          onClick={() => setShowPast((value) => !value)}
-                        >
-                          {showPast ? 'Hide stops' : '…'}
-                        </button>
-                      </li>
-                    )}
-                    {showPast &&
-                      hiddenPastStops.map((stop) => (
-                        <TripStopItem
-                          key={`${stop.sequence}-${stop.name}`}
-                          stop={stop}
-                          state="past"
-                          selected={stop.sequence === selectedTrip?.stopSequence}
-                          delaySec={liveDelay}
+              ) : (
+                <>
+                  {error !== null && (
+                    <div className="refresh-warning" role="status">
+                      Couldn't refresh
+                      <button type="button" className="link-button" onClick={retry}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {sortedDepartures.length === 0 ? (
+                    <p className="empty-row">No departures at this time.</p>
+                  ) : (
+                    <ul className="departures" aria-label="Departures">
+                      {sortedDepartures.map((item) => (
+                        <DepartureRow
+                          key={`${item.tripId}-${item.scheduled}`}
+                          item={item}
+                          selected={selectedTrip?.tripId === item.tripId}
+                          onSelect={toggleTrip}
                         />
                       ))}
-                    {currentStop !== null && (
-                      <TripStopItem
-                        key={`${currentStop.sequence}-${currentStop.name}`}
-                        stop={currentStop}
-                        state="current"
-                        selected={currentStop.sequence === selectedTrip?.stopSequence}
-                        delaySec={liveDelay}
-                      />
-                    )}
-                    {futureStops.map((stop) => (
-                      <TripStopItem
-                        key={`${stop.sequence}-${stop.name}`}
-                        stop={stop}
-                        state="future"
-                        selected={stop.sequence === selectedTrip?.stopSequence}
-                        delaySec={liveDelay}
-                      />
-                    ))}
-                  </ol>
-                )}
-              </div>
+                    </ul>
+                  )}
+                </>
+              )}
+            </section>
+            {selectedTrip !== null && (
+              <MapPanel
+                tripId={selectedTrip.tripId}
+                shape={tripShape}
+                stops={tripStops}
+                referenceSequence={referenceSequence}
+                ourSequence={ourSequence}
+                vehicle={tripVehicle}
+                color={selectedTrip.color}
+                delaySec={selectedTrip.live ? selectedTrip.delaySec : null}
+              />
             )}
-            {departuresLoading ? (
-              <div className="loading" role="status">
-                <span className="spinner" />
-                Loading departures…
-              </div>
-            ) : sortedDepartures.length === 0 ? (
-              <p className="empty-row">No departures at this time.</p>
-            ) : (
-              <ul className="departures" aria-label="Departures">
-                {sortedDepartures.map((item) => (
-                  <DepartureRow
-                    key={`${item.tripId}-${item.scheduled}`}
-                    item={item}
-                    selected={selectedTrip?.tripId === item.tripId}
-                    onSelect={toggleTrip}
-                  />
-                ))}
-              </ul>
-            )}
-
-          </section>
+          </div>
         )}
       </main>
     </div>
@@ -418,23 +269,3 @@ function App() {
 }
 
 export default App
-
-type StopGroup = {
-  name: string
-  stopIds: string[]
-}
-
-function groupStops(stops: Stop[]): StopGroup[] {
-  const groups = new Map<string, string[]>()
-  for (const stop of stops) {
-    const ids = groups.get(stop.name) ?? []
-    ids.push(stop.id)
-    groups.set(stop.name, ids)
-  }
-  return [...groups.entries()].map(([name, stopIds]) => ({ name, stopIds }))
-}
-
-function sameIds(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false
-  return left.every((id, index) => id === right[index])
-}

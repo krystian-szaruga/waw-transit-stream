@@ -14,6 +14,7 @@ class GtfsFeed:
     trips: pd.DataFrame
     stop_times: pd.DataFrame
     stops: pd.DataFrame
+    shapes: pd.DataFrame
     calendar_dates: pd.DataFrame
 
     @classmethod
@@ -26,7 +27,7 @@ class GtfsFeed:
             ),
             trips=pd.read_csv(
                 d / "trips.txt", dtype=str,
-                usecols=["route_id", "service_id", "trip_id", "block_short_name"],
+                usecols=["route_id", "service_id", "trip_id", "block_short_name", "shape_id"],
             ),
             stop_times=pd.read_csv(
                 d / "stop_times.txt",
@@ -37,6 +38,11 @@ class GtfsFeed:
                 d / "stops.txt",
                 usecols=["stop_id", "stop_name", "stop_lat", "stop_lon"],
                 dtype={"stop_id": str},
+            ),
+            shapes=pd.read_csv(
+                d / "shapes.txt",
+                usecols=["shape_id", "shape_pt_sequence", "shape_pt_lat", "shape_pt_lon"],
+                dtype={"shape_id": str, "shape_pt_sequence": "int32"},
             ),
             calendar_dates=pd.read_csv(
                 d / "calendar_dates.txt", dtype=str,
@@ -57,7 +63,7 @@ class GtfsFeed:
                 ),
                 trips=read(
                     "trips.txt", dtype=str,
-                    usecols=["route_id", "service_id", "trip_id", "block_short_name"],
+                    usecols=["route_id", "service_id", "trip_id", "block_short_name", "shape_id"],
                 ),
                 stop_times=read(
                     "stop_times.txt",
@@ -68,6 +74,11 @@ class GtfsFeed:
                     "stops.txt",
                     usecols=["stop_id", "stop_name", "stop_lat", "stop_lon"],
                     dtype={"stop_id": str},
+                ),
+                shapes=read(
+                    "shapes.txt",
+                    usecols=["shape_id", "shape_pt_sequence", "shape_pt_lat", "shape_pt_lon"],
+                    dtype={"shape_id": str, "shape_pt_sequence": "int32"},
                 ),
                 calendar_dates=read(
                     "calendar_dates.txt", dtype=str,
@@ -153,3 +164,36 @@ class TimetableBuilder:
         return st.assign(
             scheduled_arrival_offset=self.time_to_offset(st["arrival_time"])
         ).drop(columns="arrival_time")
+
+
+class ShapeBuilder:
+    TRIP_COLUMNS = ["trip_id", "shape_id"]
+    POINT_COLUMNS = ["shape_id", "point_sequence", "lat", "lon"]
+
+    def __init__(self, feed: GtfsFeed) -> None:
+        self._feed = feed
+
+    def build(self, trip_ids: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
+        trips = self._trip_shapes(trip_ids)
+        return trips, self._shape_points(trips["shape_id"].unique())
+
+    def _trip_shapes(self, trip_ids: pd.Series) -> pd.DataFrame:
+        trips = self._feed.trips
+        present = trips["trip_id"].isin(set(trip_ids)) & trips["shape_id"].notna()
+        return (
+            trips.loc[present, self.TRIP_COLUMNS]
+            .drop_duplicates("trip_id")
+            .sort_values("trip_id", ignore_index=True)
+        )
+
+    def _shape_points(self, shape_ids) -> pd.DataFrame:
+        shapes = self._feed.shapes
+        selected = shapes[shapes["shape_id"].isin(set(shape_ids))]
+        return (
+            selected.assign(
+                point_sequence=selected["shape_pt_sequence"],
+                lat=selected["shape_pt_lat"].astype("float32"),
+                lon=selected["shape_pt_lon"].astype("float32"),
+            )[self.POINT_COLUMNS]
+            .sort_values(["shape_id", "point_sequence"], ignore_index=True)
+        )

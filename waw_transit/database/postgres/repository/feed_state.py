@@ -23,7 +23,8 @@ class _StateRepository(ProviderResourceStateRepository[cursor]):
             cur.execute(
                 sql.SQL("SELECT etag, last_modified FROM {tbl} WHERE id = 1").format(tbl=self._table)
             )
-            etag, last_modified = cur.fetchone()
+            row = cur.fetchone()
+            etag, last_modified = row if row is not None else (None, None)
         return ResourceState(etag=etag, last_modified=last_modified)
 
     @override

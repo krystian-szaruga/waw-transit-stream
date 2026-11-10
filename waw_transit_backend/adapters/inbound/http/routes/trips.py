@@ -5,9 +5,9 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 
 from waw_transit_backend.adapters.inbound.http.dependencies import get_trip_service
-from waw_transit_backend.adapters.inbound.http.schemas import TripStopResponse
+from waw_transit_backend.adapters.inbound.http.schemas import ShapePointResponse, TripStopResponse
 from waw_transit_backend.application.services import TripService
-from waw_transit_backend.domain import TripStopView
+from waw_transit_backend.domain import ShapePoint, TripStopView
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -21,5 +21,23 @@ def list_trip_stops(
     return [_to_response(stop) for stop in service.stops(trip_id, service_date)]
 
 
+@router.get("/{trip_id}/shape", response_model=list[ShapePointResponse])
+def list_trip_shape(
+    trip_id: str,
+    service: TripService = Depends(get_trip_service),
+) -> list[ShapePointResponse]:
+    return [_to_shape_response(point) for point in service.shape(trip_id)]
+
+
 def _to_response(stop: TripStopView) -> TripStopResponse:
-    return TripStopResponse(sequence=stop.sequence, name=stop.name, scheduled=stop.scheduled)
+    return TripStopResponse(
+        sequence=stop.sequence,
+        name=stop.name,
+        scheduled=stop.scheduled,
+        lat=stop.lat,
+        lon=stop.lon,
+    )
+
+
+def _to_shape_response(point: ShapePoint) -> ShapePointResponse:
+    return ShapePointResponse(sequence=point.sequence, lat=point.lat, lon=point.lon)

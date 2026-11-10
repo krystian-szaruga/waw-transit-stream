@@ -110,7 +110,7 @@ def _service(watcher) -> ProcessingService:
 def _gtfs_zip(service_date: date) -> bytes:
     files = {
         "routes.txt": "route_id,route_short_name,route_type\nr9,9,0\n",
-        "trips.txt": "route_id,service_id,trip_id,block_short_name\nr9,wk,t2,3\n",
+        "trips.txt": "route_id,service_id,trip_id,block_short_name,shape_id\nr9,wk,t2,3,sh-t2\n",
         "stop_times.txt": (
             "trip_id,stop_id,stop_sequence,arrival_time\n"
             "t2,2001,1,08:00:00\n"
@@ -120,6 +120,11 @@ def _gtfs_zip(service_date: date) -> bytes:
             "stop_id,stop_name,stop_lat,stop_lon\n"
             "2001,Rondo Daszyńskiego,52.24,21.03\n"
             "2002,Zajezdnia Wola,52.25,21.04\n"
+        ),
+        "shapes.txt": (
+            "shape_id,shape_pt_sequence,shape_pt_lat,shape_pt_lon\n"
+            "sh-t2,0,52.24,21.03\n"
+            "sh-t2,1,52.25,21.04\n"
         ),
         "calendar_dates.txt": (
             "service_id,date,exception_type\n"
@@ -138,6 +143,8 @@ def _restore(previous_version: int, created_version: int) -> None:
         connection.autocommit = True
         with connection.cursor() as cur:
             cur.execute("DELETE FROM static_timetable WHERE gtfs_version = %s", (created_version,))
+            cur.execute("DELETE FROM gtfs_shapes WHERE gtfs_version = %s", (created_version,))
+            cur.execute("DELETE FROM gtfs_trip_shapes WHERE gtfs_version = %s", (created_version,))
             cur.execute("DELETE FROM gtfs_versions WHERE version_id = %s", (created_version,))
             cur.execute(
                 "UPDATE gtfs_versions SET status = 'active' WHERE version_id = %s",

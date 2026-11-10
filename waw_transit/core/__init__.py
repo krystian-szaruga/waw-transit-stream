@@ -1,5 +1,5 @@
 from .errors import RepositoryError
-from .models import LiveStateBatch, Payload, ResourceState, StopDeparture, StopDepartureRecord, VehicleSnapshot
+from .models import GtfsPayload, LiveStateBatch, Payload, ResourceState, StopDeparture, StopDepartureRecord, VehicleSnapshot
 from .ports.repository import (
     ParameterlessReadRepository,
     Provider,
@@ -16,6 +16,7 @@ from .ports.repository import (
 from .ports.live_updates import LiveVehicleStream
 
 __all__ = [
+    "GtfsPayload",
     "LiveVehicleStream",
     "ParameterlessReadRepository",
     "Provider",

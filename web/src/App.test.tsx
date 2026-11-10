@@ -1,7 +1,29 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+
+vi.mock('react-leaflet', () => ({
+  MapContainer: ({ children }: { children?: ReactNode }) => <div data-testid="map">{children}</div>,
+  TileLayer: () => null,
+  Polyline: ({ positions }: { positions: unknown[] }) => (
+    <div data-testid="map-polyline" data-points={positions.length} />
+  ),
+  CircleMarker: ({ children, center }: { children?: ReactNode; center: [number, number] }) => (
+    <div data-testid="map-marker" data-center={center.join(',')}>
+      {children}
+    </div>
+  ),
+  Marker: ({ children, position }: { children?: ReactNode; position: [number, number] }) => (
+    <div data-testid="map-bus" data-position={position.join(',')}>
+      {children}
+    </div>
+  ),
+  Tooltip: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Popup: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  useMap: () => ({ setView: () => {}, fitBounds: () => {} }),
+}))
 
 const stopResponses = [
   { id: '1001', name: 'Plac Zawiszy', lat: 52.2255, lon: 20.995 },
@@ -45,7 +67,7 @@ const departureResponses = [
     line: '175',
     direction: 'Lotnisko',
     trip_id: 't3',
-    stop_sequence: 1,
+    stop_sequence: 2,
     vehicle_next_sequence: null,
     vehicle_id: null,
     scheduled: '2026-11-09T10:39:00+01:00',
@@ -53,6 +75,20 @@ const departureResponses = [
     minutes: 9,
     delay_sec: null,
     live: false,
+  },
+  {
+    stop_id: '1002',
+    line: '175',
+    direction: 'Ahead test',
+    trip_id: 't4',
+    stop_sequence: 3,
+    vehicle_next_sequence: 1,
+    vehicle_id: '1:2001',
+    scheduled: '2026-11-09T10:50:00+01:00',
+    predicted: '2026-11-09T10:50:00+01:00',
+    minutes: 12,
+    delay_sec: 0,
+    live: true,
   },
 ]
 
@@ -80,19 +116,31 @@ const responseBodies: Record<string, unknown> = {
     },
   ],
   '/api/trips/t1/stops': [
-    { sequence: 1, name: 'Start', scheduled: '2026-11-09T10:30:00+01:00' },
-    { sequence: 2, name: 'Centrum', scheduled: '2026-11-09T10:32:00+01:00' },
-    { sequence: 3, name: 'End', scheduled: '2026-11-09T10:40:00+01:00' },
+    { sequence: 1, name: 'Start', scheduled: '2026-11-09T10:30:00+01:00', lat: 52.23, lon: 20.99 },
+    { sequence: 2, name: 'Centrum', scheduled: '2026-11-09T10:32:00+01:00', lat: 52.231, lon: 21.0 },
+    { sequence: 3, name: 'End', scheduled: '2026-11-09T10:40:00+01:00', lat: 52.24, lon: 21.01 },
+  ],
+  '/api/trips/t1/shape': [
+    { sequence: 0, lat: 52.2295, lon: 20.989 },
+    { sequence: 1, lat: 52.23, lon: 20.99 },
+    { sequence: 2, lat: 52.235, lon: 21.005 },
+    { sequence: 3, lat: 52.24, lon: 21.01 },
   ],
   '/api/trips/t2/stops': [
-    { sequence: 1, name: 'Start', scheduled: '2026-11-09T10:30:00+01:00' },
-    { sequence: 2, name: 'Middle', scheduled: '2026-11-09T10:32:00+01:00' },
-    { sequence: 3, name: 'Gocław', scheduled: '2026-11-09T10:35:00+01:00' },
-    { sequence: 4, name: 'End', scheduled: '2026-11-09T10:40:00+01:00' },
+    { sequence: 1, name: 'Start', scheduled: '2026-11-09T10:30:00+01:00', lat: 52.23, lon: 20.99 },
+    { sequence: 2, name: 'Middle', scheduled: '2026-11-09T10:32:00+01:00', lat: 52.232, lon: 21.0 },
+    { sequence: 3, name: 'Gocław', scheduled: '2026-11-09T10:35:00+01:00', lat: 52.235, lon: 21.01 },
+    { sequence: 4, name: 'End', scheduled: '2026-11-09T10:40:00+01:00', lat: 52.24, lon: 21.02 },
   ],
   '/api/trips/t3/stops': [
-    { sequence: 1, name: 'Lotnisko', scheduled: '2026-11-09T10:39:00+01:00' },
-    { sequence: 2, name: 'End', scheduled: '2026-11-09T10:45:00+01:00' },
+    { sequence: 1, name: 'Lotnisko', scheduled: '2026-11-09T10:39:00+01:00', lat: 52.16, lon: 20.96 },
+    { sequence: 2, name: 'End', scheduled: '2026-11-09T10:45:00+01:00', lat: 52.17, lon: 20.97 },
+  ],
+  '/api/trips/t4/stops': [
+    { sequence: 1, name: 'First', scheduled: '2026-11-09T10:40:00+01:00', lat: 52.22, lon: 20.98 },
+    { sequence: 2, name: 'Ahead stop', scheduled: '2026-11-09T10:44:00+01:00', lat: 52.225, lon: 20.985 },
+    { sequence: 3, name: 'Centrum', scheduled: '2026-11-09T10:50:00+01:00', lat: 52.231, lon: 21.0 },
+    { sequence: 4, name: 'After ours', scheduled: '2026-11-09T10:55:00+01:00', lat: 52.24, lon: 21.01 },
   ],
   '/api/stops/2002/departures': [
     {
@@ -132,6 +180,22 @@ class FakeWebSocket {
   }
 }
 
+function vehicleAt(tripId: string, lat: number, lon: number) {
+  return {
+    id: '1:2001',
+    type: 1,
+    number: '2001',
+    line: '175',
+    brigade: '3',
+    trip_id: tripId,
+    delay_sec: 45,
+    status: 'MATCHED',
+    next_stop: 'Centrum',
+    lat,
+    lon,
+  }
+}
+
 async function renderApp() {
   render(<App />)
   await screen.findByRole('heading', { name: 'Live departures' })
@@ -162,6 +226,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.localStorage.clear()
+  delete document.documentElement.dataset.theme
 })
 
 describe('App', () => {
@@ -244,6 +310,117 @@ describe('App', () => {
 
     expect(within(stops).getByText('Middle')).toBeInTheDocument()
     expect(within(stops).getByText('10:38')).toBeInTheDocument()
+  })
+
+  it('when a trip is selected then the map draws its road shape, stops and the live vehicle', async () => {
+    await renderApp()
+    const user = await selectCentrum()
+
+    const departures = screen.getByRole('list', { name: 'Departures' })
+    const rows = within(departures).getAllByRole('listitem')
+    await user.click(within(rows[0]).getByText('Chomiczówka'))
+    await screen.findByRole('list', { name: 'Trip stops' })
+
+    const socket = FakeWebSocket.instances[0]
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'snapshot', vehicles: [vehicleAt('t1', 52.2321, 21.0012)] }),
+      } as MessageEvent<string>)
+    })
+
+    const map = await screen.findByRole('region', { name: 'Trip map' })
+    expect(within(map).getByTestId('map-polyline')).toHaveAttribute('data-points', '4')
+    expect(within(map).getAllByTestId('map-marker')).toHaveLength(3)
+    expect(within(map).getByTestId('map-bus')).toBeInTheDocument()
+    expect(within(map).getByText('Centrum (your stop)')).toBeInTheDocument()
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'update', vehicles: [vehicleAt('t1', 52.2345, 21.0055)] }),
+      } as MessageEvent<string>)
+    })
+
+    expect(within(map).getByTestId('map-bus')).toHaveAttribute('data-position', '52.2345,21.0055')
+  })
+
+  it('when a trip has not started yet then no stop is marked as past and a notice is shown', async () => {
+    await renderApp()
+    const user = await selectCentrum()
+
+    const departures = screen.getByRole('list', { name: 'Departures' })
+    const rows = within(departures).getAllByRole('listitem')
+    await user.click(within(rows[2]).getByText('Lotnisko'))
+
+    const stops = await screen.findByRole('list', { name: 'Trip stops' })
+    expect((await within(stops).findByText('Lotnisko')).closest('li')).toHaveClass('ahead')
+    expect(within(stops).getByText('End').closest('li')).toHaveClass('future')
+    expect(screen.getByText('Not started yet · passes Centrum in 9 min')).toBeInTheDocument()
+  })
+
+  it('when a theme is chosen then the document switches and the choice is remembered', async () => {
+    await renderApp()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Light' }))
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(window.localStorage.getItem('theme')).toBe('light')
+
+    await user.click(screen.getByRole('button', { name: 'Dark' }))
+    expect(document.documentElement.dataset.theme).toBe('dark')
+
+    await user.click(screen.getByRole('button', { name: 'Auto' }))
+    expect(window.localStorage.getItem('theme')).toBe('auto')
+  })
+
+  it('when the bus is before our stop then stops it still has to pass are marked ahead', async () => {
+    await renderApp()
+    const user = await selectCentrum()
+
+    const departures = screen.getByRole('list', { name: 'Departures' })
+    const rows = within(departures).getAllByRole('listitem')
+    await user.click(within(rows[3]).getByText('Ahead test'))
+
+    const stops = await screen.findByRole('list', { name: 'Trip stops' })
+    expect((await within(stops).findByText('Ahead stop')).closest('li')).toHaveClass('ahead')
+    expect(within(stops).getByText('After ours').closest('li')).toHaveClass('future')
+    expect(within(stops).getByText('Centrum').closest('li')).toHaveClass('selected')
+  })
+
+  it('when our stop is the next one then it is highlighted with a yellow ring', async () => {
+    await renderApp()
+    const user = await selectCentrum()
+
+    const departures = screen.getByRole('list', { name: 'Departures' })
+    const rows = within(departures).getAllByRole('listitem')
+    await user.click(within(rows[0]).getByText('Chomiczówka'))
+
+    const stops = await screen.findByRole('list', { name: 'Trip stops' })
+    const centrum = (await within(stops).findByText('Centrum')).closest('li')
+    expect(centrum).toHaveClass('current')
+    expect(centrum).toHaveClass('selected')
+  })
+
+  it('when the backend request fails then retrying loads the data again', async () => {
+    let failures = 1
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (failures > 0) {
+        failures -= 1
+        return { ok: false, status: 500, json: async () => ({}) } as Response
+      }
+      const body = responseBodies[path]
+      return { ok: true, status: 200, json: async () => body } as Response
+    }))
+
+    render(<App />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Request failed with status 500')
+
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Retry' }))
+
+    await screen.findByRole('heading', { name: 'Live departures' })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('when the stop search is typed then matching stops are offered', async () => {

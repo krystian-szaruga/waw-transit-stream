@@ -1,14 +1,33 @@
-from waw_transit.core import Payload
+import pandas as pd
+
+from waw_transit.core import GtfsPayload
 
 _COPY_COLUMNS = (
     "gtfs_version, service_date, vehicle_type, line, brigade, route_id, trip_id, stop_id, "
     "stop_name, stop_sequence, stop_lat, stop_lon, scheduled_arrival_offset"
 )
+_TRIP_SHAPES_COLUMNS = "gtfs_version, trip_id, shape_id"
+_SHAPE_POINTS_COLUMNS = "gtfs_version, shape_id, point_sequence, lat, lon"
 _SHA = "a" * 64
 
 
+def _trip_shapes() -> pd.DataFrame:
+    return pd.DataFrame({"trip_id": ["t1", "t2"], "shape_id": ["s1", "s2"]})
+
+
+def _shape_points() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "shape_id": ["s1", "s1"],
+            "point_sequence": [0, 1],
+            "lat": [52.23, 52.24],
+            "lon": [20.99, 21.00],
+        }
+    )
+
+
 def _save(writer, frame) -> int:
-    return writer.save(Payload(frame, _SHA))
+    return writer.save(GtfsPayload(frame, _trip_shapes(), _shape_points(), _SHA))
 
 
 def _executed(cursor) -> list[str]:
@@ -120,3 +139,37 @@ def test_when_writer_targets_another_schema_then_statements_use_it(make_writer, 
     assert all("public." not in text for text in statements)
     assert any("archive.static_timetable_2026" in text for text in statements)
     assert any("archive.gtfs_versions" in text for text in statements)
+
+
+def test_when_saving_then_trip_shapes_and_points_are_copied_for_the_same_version(
+    make_writer, timetable_frame
+):
+    writer, cursor = make_writer(rows=(None, (7,)))
+
+    _save(writer, timetable_frame)
+
+    copy_sql = [text for kind, text in cursor.events if kind == "copy"]
+    assert copy_sql == [
+        f"COPY public.static_timetable ({_COPY_COLUMNS}) FROM STDIN WITH (FORMAT csv)",
+        f"COPY public.gtfs_trip_shapes ({_TRIP_SHAPES_COLUMNS}) FROM STDIN WITH (FORMAT csv)",
+        f"COPY public.gtfs_shapes ({_SHAPE_POINTS_COLUMNS}) FROM STDIN WITH (FORMAT csv)",
+    ]
+    assert cursor.copies[1].strip().splitlines() == ["7,t1,s1", "7,t2,s2"]
+    assert cursor.copies[2].strip().splitlines() == ["7,s1,0,52.23,20.99", "7,s1,1,52.24,21.0"]
+
+
+def test_when_saving_then_pruning_removes_shape_rows_of_retired_versions(
+    make_writer, timetable_frame
+):
+    writer, cursor = make_writer(rows=(None, (7,)))
+
+    _save(writer, timetable_frame)
+
+    statements = _executed(cursor)
+    points_at = next(i for i, text in enumerate(statements)
+                     if text.startswith("DELETE FROM public.gtfs_shapes"))
+    trip_shapes_at = next(i for i, text in enumerate(statements)
+                          if text.startswith("DELETE FROM public.gtfs_trip_shapes"))
+    versions_at = next(i for i, text in enumerate(statements)
+                       if text.startswith("DELETE FROM public.gtfs_versions"))
+    assert points_at < trip_shapes_at < versions_at

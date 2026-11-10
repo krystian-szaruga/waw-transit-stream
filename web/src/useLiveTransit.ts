@@ -21,7 +21,9 @@ export type TransitData = {
   departuresLoading: boolean
   status: ConnectionStatus
   error: string | null
+  socketError: string | null
   version: number | null
+  retry: () => void
 }
 
 export function useLiveTransit(stopIds: string[]): TransitData {
@@ -33,6 +35,7 @@ export function useLiveTransit(stopIds: string[]): TransitData {
   const [requestError, setRequestError] = useState<string | null>(null)
   const [socketError, setSocketError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
+  const [retryCount, setRetryCount] = useState(0)
   const [version, setVersion] = useState<number | null>(null)
   const versionRef = useRef<number | null>(null)
   const stopKey = stopIds.join(',')
@@ -53,7 +56,7 @@ export function useLiveTransit(stopIds: string[]): TransitData {
     return () => {
       cancelled = true
     }
-  }, [version])
+  }, [version, retryCount])
 
   useEffect(() => {
     let socket: WebSocket | null = null
@@ -117,13 +120,14 @@ export function useLiveTransit(stopIds: string[]): TransitData {
     return () => {
       cancelled = true
     }
-  }, [stopKey, revision])
+  }, [stopKey, revision, retryCount])
 
   const departures = departureState?.stopKey === stopKey ? departureState.items : []
   const departuresLoading =
     stopIds.length > 0 && departureState?.stopKey !== stopKey && requestError === null
-  const error = [requestError, socketError].filter((item) => item !== null).join(' | ') || null
-  return { lines, stops, vehicles, departures, departuresLoading, status, error, version }
+  const retry = () => setRetryCount((value) => value + 1)
+  const error = requestError
+  return { lines, stops, vehicles, departures, departuresLoading, status, error, socketError, version, retry }
 }
 
 function parseMessage(raw: string): LiveMessage | null {

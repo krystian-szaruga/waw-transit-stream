@@ -26,6 +26,7 @@ def feed_frames() -> dict[str, pd.DataFrame]:
                 "trip_id": ["T-BUS-1", "T-TRAM-1", "T-BUS-REMOVED", "T-RAIL", "T-BUS-2"],
                 "block_short_name": ["B1", "B2", "B3", "B4", "B5"],
                 "trip_headsign": ["Centrum", "Dw. Wileński", "Nowhere", "S1", "Centrum"],
+                "shape_id": ["SH-BUS-1", "SH-TRAM-1", "SH-REMOVED", "SH-RAIL", "SH-BUS-2"],
             }
         ),
         "stop_times": pd.DataFrame(
@@ -54,6 +55,30 @@ def feed_frames() -> dict[str, pd.DataFrame]:
                 "stop_desc": ["a", "b", "c"],
             }
         ),
+        "shapes": pd.DataFrame(
+            {
+                "shape_id": [
+                    "SH-BUS-1", "SH-BUS-1", "SH-BUS-1",
+                    "SH-TRAM-1", "SH-TRAM-1",
+                    "SH-BUS-2", "SH-BUS-2",
+                    "SH-RAIL", "SH-REMOVED",
+                ],
+                "shape_pt_sequence": [2, 0, 1, 0, 1, 0, 1, 0, 0],
+                "shape_pt_lat": [
+                    52.2500, 52.2300, 52.2400,
+                    52.2000, 52.2100,
+                    52.2300, 52.2600,
+                    52.1000, 52.3000,
+                ],
+                "shape_pt_lon": [
+                    21.0100, 20.9900, 21.0000,
+                    21.0000, 21.0100,
+                    20.9900, 21.0200,
+                    21.0000, 21.0500,
+                ],
+                "shape_dist_traveled": [3.0, 0.0, 1.5, 0.0, 1.0, 0.0, 2.0, 0.0, 0.0],
+            }
+        ),
         "calendar_dates": pd.DataFrame(
             {
                 "service_id": ["S-WEEKDAY", "S-WEEKDAY", "S-TOMORROW", "S-REMOVED"],
@@ -64,7 +89,6 @@ def feed_frames() -> dict[str, pd.DataFrame]:
         ),
     }
 
-
 @pytest.fixture
 def gtfs_feed(feed_frames) -> GtfsFeed:
     return GtfsFeed(
@@ -72,6 +96,7 @@ def gtfs_feed(feed_frames) -> GtfsFeed:
         trips=feed_frames["trips"].drop(columns=["trip_headsign"]),
         stop_times=feed_frames["stop_times"].drop(columns=["pickup_type"]),
         stops=feed_frames["stops"].drop(columns=["stop_desc"]),
+        shapes=feed_frames["shapes"].drop(columns=["shape_dist_traveled"]),
         calendar_dates=feed_frames["calendar_dates"].drop(columns=["unused"]),
     )
 

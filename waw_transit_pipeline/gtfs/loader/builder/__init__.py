@@ -1,3 +1,3 @@
-from .builder import GtfsFeed, TimetableBuilder
+from .builder import GtfsFeed, ShapeBuilder, TimetableBuilder
 
-__all__ = ['GtfsFeed', 'TimetableBuilder']
+__all__ = ['GtfsFeed', 'ShapeBuilder', 'TimetableBuilder']

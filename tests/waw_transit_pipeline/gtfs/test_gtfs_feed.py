@@ -7,9 +7,10 @@ def test_when_reading_zip_then_only_the_needed_columns_survive(gtfs_zip):
     feed = GtfsFeed.from_zip(gtfs_zip)
 
     assert list(feed.routes.columns) == ["route_id", "route_short_name", "route_type"]
-    assert list(feed.trips.columns) == ["route_id", "service_id", "trip_id", "block_short_name"]
+    assert list(feed.trips.columns) == ["route_id", "service_id", "trip_id", "block_short_name", "shape_id"]
     assert list(feed.stop_times.columns) == ["trip_id", "stop_id", "stop_sequence", "arrival_time"]
     assert list(feed.stops.columns) == ["stop_id", "stop_name", "stop_lat", "stop_lon"]
+    assert list(feed.shapes.columns) == ["shape_id", "shape_pt_sequence", "shape_pt_lat", "shape_pt_lon"]
     assert list(feed.calendar_dates.columns) == ["service_id", "date", "exception_type"]
 
 
@@ -26,7 +27,7 @@ def test_when_reading_a_directory_then_it_yields_the_same_feed_as_the_zip(gtfs_d
     from_directory = GtfsFeed.from_directory(gtfs_directory)
     from_zip = GtfsFeed.from_zip(gtfs_zip)
 
-    for name in ("routes", "trips", "stop_times", "stops", "calendar_dates"):
+    for name in ("routes", "trips", "stop_times", "stops", "shapes", "calendar_dates"):
         pd.testing.assert_frame_equal(
             getattr(from_directory, name),
             getattr(from_zip, name),
