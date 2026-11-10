@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: waw-transit-infra
+  name: waw-transit-deps
   labels:
-    app: waw-transit-infra
+    app: waw-transit-deps
 spec:
   restartPolicy: Always
   containers:
@@ -45,10 +45,9 @@ spec:
       value: "${KAFKA_AUTO_CREATE_TOPICS_ENABLE}"
     - name: KAFKA_NUM_PARTITIONS
       value: "${KAFKA_NUM_PARTITIONS}"
-
-  - name: kafka-topic-init
-    image: confluentinc/cp-kafka:7.5.0
-    command: ["/bin/bash", "-c"]
+    volumeMounts:
+    - mountPath: /tmp/kraft-combined-logs
+      name: kafka-data
 
   - name: postgres
     image: postgis/postgis:15-3.3
@@ -77,10 +76,12 @@ spec:
       hostPort: ${REDIS_PORT}
 
   volumes:
+  - name: kafka-data
+    persistentVolumeClaim:
+      claimName: waw-transit-kafka-data
   - name: postgres-data
-    hostPath:
-      path: ./postgres_data
-      type: DirectoryOrCreate
+    persistentVolumeClaim:
+      claimName: waw-transit-postgres-data
   - name: postgres-init-dir
     hostPath:
       path: ./database

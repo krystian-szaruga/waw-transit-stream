@@ -100,7 +100,7 @@ class ProcessingService:
             .writeStream
             .option("checkpointLocation", self._config.checkpoint_location)
             .trigger(processingTime="15 seconds")
-            .foreachBatch(_BatchHandler(gen.preparer, gen.sink))
+            .foreachBatch(_BatchHandler(gen.preparer, gen.sink, self._config.stats_enabled))
             .start()
         )
 
@@ -175,10 +175,17 @@ class _VersionContext:
 
 
 class _BatchHandler:
-    def __init__(self, preparer: LiveStatePreparer, sink: SaveRepository[LiveStateBatch, None]) -> None:
+    def __init__(
+        self,
+        preparer: LiveStatePreparer,
+        sink: SaveRepository[LiveStateBatch, None],
+        stats_enabled: bool,
+    ) -> None:
         self._preparer = preparer
         self._sink = sink
+        self._stats_enabled = stats_enabled
 
     def __call__(self, batch_df: DataFrame, batch_id: int) -> None:
-        console_stats(batch_df, batch_id)
+        if self._stats_enabled:
+            console_stats(batch_df, batch_id)
         self._sink.save(self._preparer.prepare(batch_df))

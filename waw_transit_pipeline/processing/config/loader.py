@@ -10,4 +10,6 @@ class ProcessingConfigLoader(ConfigLoader[ProcessingConfig]):
         return ProcessingConfig(
             checkpoint_location=self._env_reader.get("SPARK_CHECKPOINT_LOCATION", "./var/checkpoints/transit_stream"),
             timezone=self._env_reader.get("TIMEZONE", "Europe/Warsaw"),
+            stats_enabled=self._env_reader.get("PROCESSING_STATS_ENABLED", "false").lower()
+            in {"1", "true", "yes"},
         )

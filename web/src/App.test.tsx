@@ -520,4 +520,31 @@ describe('App', () => {
     responseBodies['/api/stops'] = previousStops
     delete responseBodies['/api/stops/9002/departures']
   })
+
+  it('when the socket is open without live data then the status is connected', async () => {
+    await renderApp()
+
+    const socket = FakeWebSocket.instances[0]
+    await act(async () => {
+      socket.onopen?.(new Event('open'))
+    })
+
+    expect(document.querySelector('.status')).toHaveTextContent('connected')
+    expect(document.querySelector('.status .dot')).toHaveClass('waiting')
+  })
+
+  it('when live vehicles arrive then the status is live', async () => {
+    await renderApp()
+
+    const socket = FakeWebSocket.instances[0]
+    await act(async () => {
+      socket.onopen?.(new Event('open'))
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'snapshot', vehicles: [vehicleAt('t1', 52.2321, 21.0012)] }),
+      } as MessageEvent<string>)
+    })
+
+    expect(document.querySelector('.status')).toHaveTextContent('live')
+    expect(document.querySelector('.status .dot')).toHaveClass('dot')
+  })
 })
