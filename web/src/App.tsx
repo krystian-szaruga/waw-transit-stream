@@ -25,11 +25,11 @@ function App() {
   const [showPast, setShowPast] = useState(false)
   const tripDetailRef = useRef<HTMLDivElement | null>(null)
   const stopIds = useMemo(() => selectedGroup?.stopIds ?? [], [selectedGroup])
-  const { stops, departures, vehicles, departuresLoading, status, error, version } =
+  const { stops, departures, vehicles, departuresLoading, status, error, socketError, version, retry } =
     useLiveTransit(stopIds)
 
   const stopGroups = useMemo(() => groupStops(stops), [stops])
-  const statusHint = [error, version !== null ? `Timetable v${version}` : null]
+  const statusHint = [socketError, version !== null ? `Timetable v${version}` : null]
     .filter((item) => item !== null && item !== '')
     .join(' · ')
 
@@ -155,17 +155,21 @@ function App() {
           onSelect={selectStop}
         />
 
-        {error && (
-          <div className="error-banner" role="alert">
-            {error}
-          </div>
-        )}
-
         {selectedGroup === null ? (
-          <section className="empty">
-            <h1>Live departures</h1>
-            <p>Select a stop to see upcoming departures.</p>
-          </section>
+          error !== null ? (
+            <section className="error-card" role="alert">
+              <h2>Could not load transit data</h2>
+              <p className="muted">{error}</p>
+              <button type="button" className="back" onClick={retry}>
+                Retry
+              </button>
+            </section>
+          ) : (
+            <section className="empty">
+              <h1>Live departures</h1>
+              <p>Select a stop to see upcoming departures.</p>
+            </section>
+          )
         ) : (
           <div className={selectedTrip === null ? 'workspace' : 'workspace with-map'}>
             <section className="board">
@@ -211,19 +215,38 @@ function App() {
                   <span className="spinner" />
                   Loading departures…
                 </div>
-              ) : sortedDepartures.length === 0 ? (
-                <p className="empty-row">No departures at this time.</p>
+              ) : error !== null && sortedDepartures.length === 0 ? (
+                <div className="error-card inline" role="alert">
+                  <p className="muted">{error}</p>
+                  <button type="button" className="back" onClick={retry}>
+                    Retry
+                  </button>
+                </div>
               ) : (
-                <ul className="departures" aria-label="Departures">
-                  {sortedDepartures.map((item) => (
-                    <DepartureRow
-                      key={`${item.tripId}-${item.scheduled}`}
-                      item={item}
-                      selected={selectedTrip?.tripId === item.tripId}
-                      onSelect={toggleTrip}
-                    />
-                  ))}
-                </ul>
+                <>
+                  {error !== null && (
+                    <div className="refresh-warning" role="status">
+                      Couldn't refresh
+                      <button type="button" className="link-button" onClick={retry}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {sortedDepartures.length === 0 ? (
+                    <p className="empty-row">No departures at this time.</p>
+                  ) : (
+                    <ul className="departures" aria-label="Departures">
+                      {sortedDepartures.map((item) => (
+                        <DepartureRow
+                          key={`${item.tripId}-${item.scheduled}`}
+                          item={item}
+                          selected={selectedTrip?.tripId === item.tripId}
+                          onSelect={toggleTrip}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </section>
             {selectedTrip !== null && (

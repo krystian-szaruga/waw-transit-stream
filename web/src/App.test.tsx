@@ -400,6 +400,29 @@ describe('App', () => {
     expect(centrum).toHaveClass('selected')
   })
 
+  it('when the backend request fails then retrying loads the data again', async () => {
+    let failures = 1
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (failures > 0) {
+        failures -= 1
+        return { ok: false, status: 500, json: async () => ({}) } as Response
+      }
+      const body = responseBodies[path]
+      return { ok: true, status: 200, json: async () => body } as Response
+    }))
+
+    render(<App />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Request failed with status 500')
+
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Retry' }))
+
+    await screen.findByRole('heading', { name: 'Live departures' })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('when the stop search is typed then matching stops are offered', async () => {
     await renderApp()
 

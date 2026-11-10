@@ -564,16 +564,6 @@ button {
   }
 }
 
-.error-banner {
-  margin-bottom: 24px;
-  padding: 12px 16px;
-  border: 1px solid var(--c-danger);
-  border-radius: 10px;
-  background: var(--c-danger-bg);
-  color: var(--c-danger-text);
-  font-size: 13px;
-}
-
 @media (max-width: 760px) {
   .topbar {
     flex-wrap: wrap;
@@ -629,4 +619,51 @@ button {
 
 .stop-popup span {
   color: var(--c-text-muted);
+}
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 28px 22px;
+  border: 1px solid var(--c-danger);
+  border-radius: 14px;
+  background: var(--c-danger-bg);
+  color: var(--c-danger-text);
+}
+
+.error-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.error-card .muted {
+  color: inherit;
+}
+
+.error-card.inline {
+  padding: 20px 22px;
+  border-radius: 0;
+  border: 0;
+}
+
+.refresh-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 22px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-yellow-wash);
+  color: var(--c-text-muted);
+  font-size: 13px;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-accent);
+  font-size: 13px;
+  text-decoration: underline;
 }
