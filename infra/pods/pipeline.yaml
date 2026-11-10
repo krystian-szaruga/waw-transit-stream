@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: waw-transit-pipeline
+  labels:
+    app: waw-transit-pipeline
+spec:
+  restartPolicy: Always
+  containers:
+  - name: kafka
+    image: confluentinc/cp-kafka:7.5.0
+    env:
+    - name: KAFKA_NODE_ID
+      value: "1"
+    - name: KAFKA_PROCESS_ROLES
+      value: "broker,controller"
+    - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+      value: "1@127.0.0.1:29093"
+    - name: KAFKA_LISTENERS
+      value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093"
+    - name: KAFKA_ADVERTISED_LISTENERS
+      value: "PLAINTEXT://127.0.0.1:9092"
+    - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+      value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+    - name: KAFKA_INTER_BROKER_LISTENER_NAME
+      value: "PLAINTEXT"
+    - name: KAFKA_CONTROLLER_LISTENER_NAMES
+      value: "CONTROLLER"
+    - name: KAFKA_LOG_DIRS
+      value: "/tmp/kraft-combined-logs"
+    - name: CLUSTER_ID
+      value: "${CLUSTER_ID}"
+    - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+      value: "1"
+    - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+      value: "1"
+    - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+      value: "1"
+    - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+      value: "0"
+    - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+      value: "true"
+    - name: KAFKA_NUM_PARTITIONS
+      value: "3"
+    volumeMounts:
+    - mountPath: /tmp/kraft-combined-logs
+      name: kafka-data
+
+  - name: pipeline
+    image: localhost/waw-transit-pipeline:latest
+    env:
+    - name: TZ
+      value: "${TIMEZONE}"
+    - name: WARSAW_API_TOKEN
+      value: "${WARSAW_API_TOKEN}"
+    - name: FETCH_INTERVAL_SECONDS
+      value: "${FETCH_INTERVAL_SECONDS}"
+    - name: TIMEZONE
+      value: "${TIMEZONE}"
+    - name: PROCESSING_STATS_ENABLED
+      value: "${PROCESSING_STATS_ENABLED}"
+    - name: DB_HOST
+      value: "waw-transit-infra"
+    - name: DB_PORT
+      value: "5432"
+    - name: DB_NAME
+      value: "${DB_NAME}"
+    - name: DB_USER
+      value: "${DB_USER}"
+    - name: DB_PASSWORD
+      value: "${DB_PASSWORD}"
+    - name: REDIS_HOST
+      value: "waw-transit-infra"
+    - name: REDIS_PORT
+      value: "6379"
+    - name: REDIS_PASSWORD
+      value: "${REDIS_PASSWORD}"
+    - name: REDIS_DB
+      value: "${REDIS_DB}"
+    - name: KAFKA_BOOTSTRAP_SERVERS
+      value: "127.0.0.1:9092"
+    - name: KAFKA_CLIENT_ID
+      value: "${KAFKA_CLIENT_ID}"
+    - name: KAFKA_TOPIC_BUSES
+      value: "${KAFKA_TOPIC_BUSES}"
+    - name: KAFKA_TOPIC_TRAMS
+      value: "${KAFKA_TOPIC_TRAMS}"
+    - name: KAFKA_TOPIC_GTFS_VERSION
+      value: "${KAFKA_TOPIC_GTFS_VERSION}"
+    - name: KAFKA_STARTING_OFFSETS
+      value: "${KAFKA_STARTING_OFFSETS}"
+    - name: SPARK_CHECKPOINT_LOCATION
+      value: "/app/var/checkpoints/transit_stream"
+    volumeMounts:
+    - mountPath: /app/var/checkpoints
+      name: spark-checkpoints
+
+  volumes:
+  - name: kafka-data
+    persistentVolumeClaim:
+      claimName: waw-transit-kafka-data
+  - name: spark-checkpoints
+    persistentVolumeClaim:
+      claimName: waw-transit-checkpoints

@@ -32,6 +32,14 @@ function App() {
   const statusHint = [socketError, version !== null ? `Timetable v${version}` : null]
     .filter((item) => item !== null && item !== '')
     .join(' · ')
+  const hasLiveData = vehicles.length > 0 || departures.some((item) => item.live)
+  const connectionStatus = status === 'live' && !hasLiveData ? 'connected' : status
+  const statusDot =
+    connectionStatus === 'live'
+      ? 'dot'
+      : connectionStatus === 'offline'
+        ? 'dot offline'
+        : 'dot waiting'
 
   useEffect(() => {
     setSelectedGroup((current) => {
@@ -141,8 +149,8 @@ function App() {
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onChange={setTheme} />
           <div className="status" title={statusHint}>
-            <span className={status === 'live' ? 'dot' : 'dot offline'} />
-            {status}
+            <span className={statusDot} />
+            {connectionStatus}
           </div>
         </div>
       </header>
