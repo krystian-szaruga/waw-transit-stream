@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -15,26 +16,40 @@ from waw_transit_backend.adapters.inbound.websocket.schemas import (
 from waw_transit_backend.application.services import LiveFeedService
 from waw_transit_backend.domain import DepartureView, VehicleView
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     hub: ConnectionHub = websocket.app.state.hub
-    service: LiveFeedService = websocket.app.state.container.live_feed_service
+    container = websocket.app.state.container
+    service: LiveFeedService = container.live_feed_service
     queue = await hub.connect(websocket)
     try:
         message = SubscribeMessage.model_validate(await websocket.receive_json())
         snapshot = await asyncio.to_thread(service.snapshot, message.stop_id, message.line)
-        await hub.send(websocket, _snapshot_message(snapshot))
+        version = await asyncio.to_thread(container.active_version.load, None)
+        sent_version = _log_version(None, version)
+        await hub.send(websocket, _snapshot_message(snapshot, version))
         while True:
             items = await queue.get()
             filtered = await asyncio.to_thread(_for_subscription, items, message, service)
-            await hub.send(websocket, _update_message(filtered))
+            version = await asyncio.to_thread(container.active_version.load, None)
+            sent_version = _log_version(sent_version, version)
+            await hub.send(websocket, _update_message(filtered, version))
     except WebSocketDisconnect:
         pass
     finally:
         await hub.disconnect(websocket)
+
+
+def _log_version(sent: int | None, current: int | None) -> int | None:
+    if current is not None and current != sent:
+        logger.info("Sending timetable version %d to the client", current)
+        return current
+    return sent
 
 
 def _for_subscription(
@@ -53,14 +68,18 @@ def _for_subscription(
     return departures + list(service.departures_for(message.stop_id))
 
 
-def _snapshot_message(items: list[VehicleView | DepartureView]) -> SnapshotMessage:
+def _snapshot_message(
+    items: list[VehicleView | DepartureView], version: int | None
+) -> SnapshotMessage:
     vehicles, departures = _split(items)
-    return SnapshotMessage(vehicles=vehicles, departures=departures)
+    return SnapshotMessage(vehicles=vehicles, departures=departures, version=version)
 
 
-def _update_message(items: list[VehicleView | DepartureView]) -> UpdateMessage:
+def _update_message(
+    items: list[VehicleView | DepartureView], version: int | None
+) -> UpdateMessage:
     vehicles, departures = _split(items)
-    return UpdateMessage(vehicles=vehicles, departures=departures)
+    return UpdateMessage(vehicles=vehicles, departures=departures, version=version)
 
 
 def _split(

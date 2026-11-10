@@ -11,7 +11,7 @@ from waw_transit_pipeline.adapters.kafka import stream_options, topic_to_vehicle
 from waw_transit_pipeline.adapters.spark import open_stream, parse_records
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
 from waw_transit_pipeline.processing.model import WarsawLiveCol, LookupSnapshot
-from waw_transit.database.redis import RedisSession
+from waw_transit.database.redis.session import RedisSession
 from waw_transit.database.redis import create_live_state_repository
 from waw_transit_pipeline.processing.sink import LiveStatePreparer
 

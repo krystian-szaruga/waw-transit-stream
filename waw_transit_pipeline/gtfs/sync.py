@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from waw_transit.core import ResourceState, ResourceStateRepository
-from waw_transit_pipeline.core.ports import GtfsDownloader
+from waw_transit_pipeline.core.ports import GtfsDownloader, Publisher
 from waw_transit_pipeline.gtfs.loader import TimetableLoader
 from waw_transit_pipeline.gtfs.loader.builder import GtfsFeed
 
@@ -17,11 +17,13 @@ class TimetableSync:
         loader: TimetableLoader,
         state: ResourceStateRepository,
         downloader: GtfsDownloader,
+        publisher: Publisher,
         interval: int = 1800,
     ) -> None:
         self._loader = loader
         self._state = state
         self._downloader = downloader
+        self._publisher = publisher
         self._interval = interval
 
     def run(self) -> None:
@@ -42,8 +44,16 @@ class TimetableSync:
         version_id = self._loader.run(
             GtfsFeed.from_zip(downloaded.content), downloaded.sha256
         )
+        if version_id is not None:
+            self._publish(version_id)
         self._state.put(ResourceState(downloaded.etag, downloaded.last_modified))
         return version_id
+
+    def _publish(self, version_id: int) -> None:
+        self._publisher.publish({"version_id": version_id})
+        self._publisher.poll()
+        self._publisher.flush(5.0)
+        logger.info("Published timetable version %d", version_id)
 
     @staticmethod
     def _log(version_id: int | None) -> None:

@@ -3,8 +3,12 @@ import sys
 import warnings
 
 from waw_transit.database import create_timetable_reader, create_version_reader
-from waw_transit.database.redis import open_live_state_repository
-from waw_transit_pipeline.adapters.kafka import stream_options, topic_to_vehicle_type
+from waw_transit.database.redis import open_live_state_repository, open_version_store
+from waw_transit_pipeline.adapters.kafka import (
+    open_version_watcher,
+    stream_options,
+    topic_to_vehicle_type,
+)
 from waw_transit_pipeline.adapters.spark import open_stream, parse_records
 from waw_transit_pipeline.adapters.spark import session
 from waw_transit_pipeline.core.config import KafkaConfigLoader
@@ -23,15 +27,19 @@ def run_processing() -> None:
         topic_to_type=topic_to_vehicle_type(kafka_config),
     )
     with open_live_state_repository(config.timezone) as repository:
-        service = ProcessingService(
-            config,
-            repository,
-            create_timetable_reader(),
-            create_version_reader(),
-            live_reader,
-        )
-        with session.open_session(timezone=config.timezone) as spark:
-            service.run(spark)
+        with open_version_store() as version_store:
+            with open_version_watcher(kafka_config) as watcher:
+                service = ProcessingService(
+                    config,
+                    repository,
+                    create_timetable_reader(),
+                    create_version_reader(),
+                    watcher,
+                    version_store,
+                    live_reader,
+                )
+                with session.open_session(timezone=config.timezone) as spark:
+                    service.run(spark)
 
 
 def _setup_logging() -> None:

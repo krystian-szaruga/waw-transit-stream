@@ -31,7 +31,7 @@ def redpanda() -> Iterator[KafkaConfig]:
         bootstrap = container.get_bootstrap_server()
         admin = AdminClient({"bootstrap.servers": bootstrap})
         created = admin.create_topics(
-            [NewTopic(name, num_partitions=1, replication_factor=1) for name in topics.values()]
+            [NewTopic(name, num_partitions=1, replication_factor=1) for name in [*topics.values(), "versions"]]
         )
         for future in created.values():
             future.result()
@@ -40,6 +40,7 @@ def redpanda() -> Iterator[KafkaConfig]:
             client_id="tests",
             starting_offsets="earliest",
             topics={VehicleType.BUS.name.lower(): "buses", VehicleType.TRAM.name.lower(): "trams"},
+            version_topic="versions",
         )
 
 

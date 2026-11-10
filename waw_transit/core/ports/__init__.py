@@ -8,8 +8,10 @@ from .repository import (
     ResourceStateRepository,
     SaveRepository,
 )
+from .live_updates import LiveVehicleStream
 
 __all__ = [
+    "LiveVehicleStream",
     "Provider",
     "ProviderReadRepository",
     "ProviderResourceStateRepository",

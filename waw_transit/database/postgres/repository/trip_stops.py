@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 from psycopg2 import sql
 
 from waw_transit.core import ReadRepository
+from waw_transit.core.models import TripStopsQuery, TripStopView
 from waw_transit.database.postgres.cursor import create_provider
 from waw_transit.database.postgres.reader import fetch_all, run
-from waw_transit_backend.domain import TripStopsQuery, TripStopView
 
 
 def create_trip_stops_reader(

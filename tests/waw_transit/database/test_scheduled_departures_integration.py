@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from waw_transit_backend.adapters.outbound.postgres.scheduled_departures import (
+from waw_transit.database.postgres.repository.scheduled_departures import (
     create_scheduled_departures_reader,
 )
-from waw_transit_backend.domain import ScheduleQuery
+from waw_transit.core.models import ScheduleQuery
 
 _TZ = ZoneInfo("Europe/Warsaw")
 

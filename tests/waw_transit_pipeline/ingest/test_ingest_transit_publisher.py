@@ -1,5 +1,3 @@
-import orjson
-
 from waw_transit_pipeline.core.ports import Publisher
 from waw_transit_pipeline.ingest.publisher import IngestTransitPublisher
 
@@ -14,9 +12,9 @@ class _FakeClient:
 
 class _FakePublisher(Publisher):
     def __init__(self) -> None:
-        self.produced: list[bytes] = []
+        self.produced: list[object] = []
 
-    def publish(self, payload: bytes) -> None:
+    def publish(self, payload: object) -> None:
         self.produced.append(payload)
 
     def poll(self) -> None:
@@ -40,4 +38,4 @@ def test_when_fetch_returns_vehicles_then_each_becomes_one_json_message():
     subject = IngestTransitPublisher(_FakeClient(vehicles), publisher)
 
     assert subject.execute() == 2
-    assert [orjson.loads(payload) for payload in publisher.produced] == vehicles
+    assert publisher.produced == vehicles

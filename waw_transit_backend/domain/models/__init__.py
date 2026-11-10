@@ -1,8 +1,8 @@
-from .departure import DepartureView, ScheduleQuery, ScheduledDeparture
+from .departure import DepartureView
 from .line import LineView
 from .stop import StopView
-from .trip import TripStopsQuery, TripStopView
 from .vehicle import VehicleView
+from waw_transit.core.models import ScheduleQuery, ScheduledDeparture, TripStopsQuery, TripStopView
 
 __all__ = [
     "DepartureView",

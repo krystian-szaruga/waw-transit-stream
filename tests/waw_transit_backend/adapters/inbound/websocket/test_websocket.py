@@ -78,14 +78,34 @@ def test_when_a_vehicle_update_is_published_then_an_update_message_is_sent(
     assert {vehicle["id"] for vehicle in message["vehicles"]} == {"1:2001", "2:3001"}
 
 
-def _publish_until(stop: threading.Event) -> None:
-    client = redis_client.Redis(
+def test_when_an_active_version_is_stored_then_the_snapshot_carries_it(
+    client: TestClient,
+) -> None:
+    store = _redis_client()
+    try:
+        store.set("gtfs:active_version", "42")
+        with client.websocket_connect("/ws") as websocket:
+            websocket.send_json({"type": "subscribe"})
+            message = websocket.receive_json()
+    finally:
+        store.delete("gtfs:active_version")
+        store.close()
+
+    assert message["version"] == 42
+
+
+def _redis_client() -> redis_client.Redis:
+    return redis_client.Redis(
         host=os.environ.get("REDIS_HOST", "127.0.0.1"),
         port=int(os.environ.get("REDIS_PORT", "6379")),
         password=os.environ.get("REDIS_PASSWORD", ""),
         db=int(os.environ.get("REDIS_DB", "0")),
         decode_responses=True,
     )
+
+
+def _publish_until(stop: threading.Event) -> None:
+    client = _redis_client()
     try:
         while not stop.is_set():
             client.publish("vehicles.updates", json.dumps(VEHICLE_UPDATE))

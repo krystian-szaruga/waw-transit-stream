@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -289,5 +289,58 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Request failed with status 500')
+  })
+
+  it('when a new timetable version arrives then stops are refetched and the selected stop follows its name', async () => {
+    const previousStops = responseBodies['/api/stops']
+    await renderApp()
+    await selectCentrum()
+
+    responseBodies['/api/stops'] = [
+      { id: '9002', name: 'Centrum', lat: 52.2297, lon: 21.0122 },
+      { id: '1001', name: 'Plac Zawiszy', lat: 52.2255, lon: 20.995 },
+    ]
+    responseBodies['/api/stops/9002/departures'] = [
+      {
+        stop_id: '9002',
+        line: '175',
+        direction: 'Chomiczówka',
+        trip_id: 't9',
+        stop_sequence: 2,
+        vehicle_next_sequence: 2,
+        vehicle_id: '1:2001',
+        scheduled: '2026-11-09T10:32:00+01:00',
+        predicted: null,
+        minutes: 2,
+        delay_sec: null,
+        live: false,
+      },
+    ]
+
+    const socket = FakeWebSocket.instances[0]
+    const fetchMock = vi.mocked(fetch)
+    const callsBefore = fetchMock.mock.calls.length
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'snapshot', vehicles: [], version: 2 }),
+      } as MessageEvent<string>)
+    })
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls
+          .slice(callsBefore)
+          .some(([input]) => String(input).includes('/api/stops/9002/departures')),
+      ).toBe(true)
+    })
+    expect(
+      fetchMock.mock.calls.slice(callsBefore).some(([input]) => String(input).endsWith('/api/stops')),
+    ).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Centrum' })).toBeInTheDocument()
+    expect(screen.getByTitle('Timetable v2')).toBeInTheDocument()
+
+    responseBodies['/api/stops'] = previousStops
+    delete responseBodies['/api/stops/9002/departures']
   })
 })

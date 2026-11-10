@@ -9,9 +9,12 @@ from .ports.repository import (
     ProviderResourceStateRepository,
     ResourceStateRepository,
     SaveRepository,
+    VersionStore,
 )
+from .ports.live_updates import LiveVehicleStream
 
 __all__ = [
+    "LiveVehicleStream",
     "Provider",
     "ProviderReadRepository",
     "ReadRepository",
@@ -20,6 +23,7 @@ __all__ = [
     "ProviderResourceStateRepository",
     "ResourceStateRepository",
     "SaveRepository",
+    "VersionStore",
     "Payload",
     "ResourceState",
     "RepositoryError",
