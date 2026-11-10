@@ -7,7 +7,12 @@ from typing import override
 from psycopg2 import sql
 from psycopg2.extensions import cursor
 
-from waw_transit.core import ProviderReadRepository, ReadRepository
+from waw_transit.core import (
+    ParameterlessReadRepository,
+    ProviderParameterlessReadRepository,
+    ProviderReadRepository,
+    ReadRepository,
+)
 from waw_transit.core.models.static_state import StopInfo
 from waw_transit.core.ports.repository.provider import Provider
 from waw_transit.database.postgres.cursor import create_provider
@@ -17,7 +22,7 @@ from waw_transit.database.postgres.reader import fetch_all, fetch_one, run
 def create_all_stops_reader(
     schema: str = "public",
     table: str = "static_timetable",
-) -> ReadRepository[None, Sequence[StopInfo]]:
+) -> ParameterlessReadRepository[Sequence[StopInfo]]:
     return _AllStopsReader(create_provider(), schema, table)
 
 
@@ -28,7 +33,7 @@ def create_stop_reader(
     return _StopReader(create_provider(), schema, table)
 
 
-class _AllStopsReader(ProviderReadRepository[cursor, None, Sequence[StopInfo]]):
+class _AllStopsReader(ProviderParameterlessReadRepository[cursor, Sequence[StopInfo]]):
 
     def __init__(
         self,
@@ -41,7 +46,7 @@ class _AllStopsReader(ProviderReadRepository[cursor, None, Sequence[StopInfo]]):
         self._versions = sql.Identifier(schema, "gtfs_versions")
 
     @override
-    def load(self, payload: None = None) -> Sequence[StopInfo]:
+    def load(self) -> Sequence[StopInfo]:
         query = sql.SQL(
             "SELECT DISTINCT stop_id, stop_name, stop_lat, stop_lon FROM {tbl} "
             "WHERE gtfs_version = (SELECT version_id FROM {versions} WHERE status = 'active') "

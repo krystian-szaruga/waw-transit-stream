@@ -127,9 +127,25 @@ function App() {
   const [showPast, setShowPast] = useState(false)
   const tripDetailRef = useRef<HTMLDivElement | null>(null)
   const stopIds = useMemo(() => selectedGroup?.stopIds ?? [], [selectedGroup])
-  const { stops, departures, departuresLoading, status, error } = useLiveTransit(stopIds)
+  const { stops, departures, departuresLoading, status, error, version } =
+    useLiveTransit(stopIds)
 
   const stopGroups = useMemo(() => groupStops(stops), [stops])
+  const statusHint = [
+    error,
+    version !== null ? `Timetable v${version}` : null,
+  ]
+    .filter((item) => item !== null && item !== '')
+    .join(' · ')
+
+  useEffect(() => {
+    setSelectedGroup((current) => {
+      if (current === null || stopGroups.length === 0) return current
+      const fresh = stopGroups.find((group) => group.name === current.name)
+      if (fresh === undefined) return null
+      return sameIds(fresh.stopIds, current.stopIds) ? current : fresh
+    })
+  }, [stopGroups])
   const matchingStops = useMemo(
     () =>
       stopQuery.trim() === ''
@@ -240,7 +256,7 @@ function App() {
           </button>
         </nav>
 
-        <div className="status" title={error ?? undefined}>
+        <div className="status" title={statusHint}>
           <span className={status === 'live' ? 'dot' : 'dot offline'} />
           {status}
         </div>
@@ -416,4 +432,9 @@ function groupStops(stops: Stop[]): StopGroup[] {
     groups.set(stop.name, ids)
   }
   return [...groups.entries()].map(([name, stopIds]) => ({ name, stopIds }))
+}
+
+function sameIds(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((id, index) => id === right[index])
 }

@@ -1,7 +1,9 @@
 from .errors import RepositoryError
 from .models import LiveStateBatch, Payload, ResourceState, StopDeparture, StopDepartureRecord, VehicleSnapshot
 from .ports.repository import (
+    ParameterlessReadRepository,
     Provider,
+    ProviderParameterlessReadRepository,
     ProviderReadRepository,
     ReadRepository,
     ProviderSaveRepository,
@@ -9,10 +11,15 @@ from .ports.repository import (
     ProviderResourceStateRepository,
     ResourceStateRepository,
     SaveRepository,
+    VersionStore,
 )
+from .ports.live_updates import LiveVehicleStream
 
 __all__ = [
+    "LiveVehicleStream",
+    "ParameterlessReadRepository",
     "Provider",
+    "ProviderParameterlessReadRepository",
     "ProviderReadRepository",
     "ReadRepository",
     "ProviderSaveRepository",
@@ -20,6 +27,7 @@ __all__ = [
     "ProviderResourceStateRepository",
     "ResourceStateRepository",
     "SaveRepository",
+    "VersionStore",
     "Payload",
     "ResourceState",
     "RepositoryError",

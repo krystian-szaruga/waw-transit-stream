@@ -17,9 +17,11 @@ class SnapshotMessage(BaseModel):
     type: Literal["snapshot"] = "snapshot"
     vehicles: list[VehicleResponse]
     departures: list[DepartureResponse]
+    version: int | None = None
 
 
 class UpdateMessage(BaseModel):
     type: Literal["update"] = "update"
     vehicles: list[VehicleResponse]
     departures: list[DepartureResponse]
+    version: int | None = None

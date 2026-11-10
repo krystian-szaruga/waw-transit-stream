@@ -11,8 +11,8 @@ from pyspark import Broadcast
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery, StreamingQueryException
 
-from waw_transit.core import ReadRepository, RepositoryError, SaveRepository
-from waw_transit_pipeline.core.ports import StreamReader
+from waw_transit.core import ReadRepository, RepositoryError, SaveRepository, VersionStore, ParameterlessReadRepository
+from waw_transit_pipeline.core.ports import StreamReader, VersionWatcher
 from waw_transit.core.models import LiveStateBatch
 from waw_transit_pipeline.processing.assignment import AssignmentPipeline
 from waw_transit_pipeline.processing.config import ProcessingConfig
@@ -26,6 +26,7 @@ logger = logging.getLogger("warsaw_transit_stream_processing")
 
 class ProcessingService:
     _VERSION_POLL_SEC = 10.0
+    _VERSION_WAIT_SEC = 5.0
     _IDLE_POLL_SEC = 0.2
     _IDLE_TIMEOUT_SEC = 60.0
 
@@ -34,13 +35,17 @@ class ProcessingService:
         config: ProcessingConfig,
         sink: SaveRepository[LiveStateBatch, None],
         timetable_reader: ReadRepository,
-        version_reader: ReadRepository,
+        version_reader: ParameterlessReadRepository,
+        watcher: VersionWatcher,
+        version_store: VersionStore,
         stream_reader: StreamReader[SparkSession, DataFrame],
     ) -> None:
         self._config = config
         self._sink = sink
         self._timetable_reader = timetable_reader
         self._version_reader = version_reader
+        self._watcher = watcher
+        self._version_store = version_store
         self._stream_reader = stream_reader
         self._stop = threading.Event()
 
@@ -56,15 +61,18 @@ class ProcessingService:
         self._register_system_signals()
         logger.info("Loading timetable lookup...")
         snapshot = LookupLoader(self._timetable_reader).load()
-        versions = self._version_reader
+        self._version_store.save(snapshot.version_id)
         logger.info("Loaded timetable version %d", snapshot.version_id)
         gen = self._prepare(spark, snapshot)
         while not self._stop.is_set():
             console = self._start(spark, gen)
-            changed = self._await(console, versions, gen.snapshot.version_id)
+            changed = self._await(console, gen.snapshot.version_id)
             next_gen: _VersionContext | None = None
             if changed and not self._stop.is_set():
                 next_gen = self._prepare_next(spark, gen.snapshot)
+                if next_gen is not None:
+                    self._version_store.save(next_gen.snapshot.version_id)
+                    self._watcher.commit()
             self._stop_when_idle(console)
             gen.broadcast.destroy()
             if next_gen is None:
@@ -76,15 +84,15 @@ class ProcessingService:
         if gen is not None:
             gen.broadcast.destroy()
 
-    def _prepare(self, spark: SparkSession, snapshot: LookupSnapshot) -> _VersionContext:
-        preparer = LiveStatePreparer(snapshot.lookup, self._config.timezone)
-        broadcast = spark.sparkContext.broadcast(snapshot)
-        return _VersionContext(snapshot, preparer, self._sink, broadcast)
-
     def _prepare_next(self, spark: SparkSession, current: LookupSnapshot) -> _VersionContext | None:
         new_snapshot = self._reload(current)
         if new_snapshot is current: return None
         return self._prepare(spark, new_snapshot)
+
+    def _prepare(self, spark: SparkSession, snapshot: LookupSnapshot) -> _VersionContext:
+        preparer = LiveStatePreparer(snapshot.lookup, self._config.timezone)
+        broadcast = spark.sparkContext.broadcast(snapshot)
+        return _VersionContext(snapshot, preparer, self._sink, broadcast)
 
     def _start(self, spark: SparkSession, gen: _VersionContext) -> StreamingQuery:
         return (
@@ -117,22 +125,26 @@ class ProcessingService:
         live: DataFrame = self._stream_reader.read(spark)
         return AssignmentPipeline(lookup_bc).build(live)
 
-    def _await(self, console: StreamingQuery, versions, version_id: int) -> bool:
+    def _await(self, console: StreamingQuery, version_id: int) -> bool:
         try:
             while console.isActive and not self._stop.is_set():
+                event = self._watcher.next_version(self._VERSION_WAIT_SEC)
+                if event is None:
+                    continue
+                logger.info("Version event %d (loaded %d)", event, version_id)
                 try:
-                    active = versions.load()
-                    logger.debug("Version poll: active %d, loaded %d", active, version_id)
-                    if active != version_id:
-                        logger.info("New version %d detected (loaded %d)", active, version_id)
-                        return True
+                    active = self._version_reader.load()
                 except RepositoryError as err:
                     logger.error(
                         "Failed to read the active GTFS version; keeping version %d, %s",
                         version_id,
                         err,
                     )
-                self._stop.wait(timeout=self._VERSION_POLL_SEC)
+                    continue
+                if active != version_id:
+                    logger.info("New version %d detected (loaded %d)", active, version_id)
+                    return True
+                self._watcher.commit()
         except KeyboardInterrupt:
             self._stop.set()
         return False

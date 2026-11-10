@@ -7,12 +7,18 @@ from typing import override
 
 import redis
 
-from waw_transit.core import ProviderReadRepository, ReadRepository, VehicleSnapshot
+from waw_transit.core import (
+    ParameterlessReadRepository,
+    ProviderParameterlessReadRepository,
+    ProviderReadRepository,
+    ReadRepository,
+    VehicleSnapshot,
+)
 from waw_transit.database.redis.reader import run
 from waw_transit.database.redis.session import RedisSession
 
 
-def create_all_vehicles_reader() -> ReadRepository[None, Sequence[VehicleSnapshot]]:
+def create_all_vehicles_reader() -> ParameterlessReadRepository[Sequence[VehicleSnapshot]]:
     return _AllVehiclesReader(RedisSession())
 
 
@@ -25,14 +31,14 @@ def create_vehicle_reader() -> ReadRepository[str, VehicleSnapshot | None]:
 
 
 class _AllVehiclesReader(
-    ProviderReadRepository[redis.Redis, None, Sequence[VehicleSnapshot]]
+    ProviderParameterlessReadRepository[redis.Redis, Sequence[VehicleSnapshot]]
 ):
 
     def __init__(self, session: RedisSession) -> None:
         super().__init__(session)
 
     @override
-    def load(self, payload: None = None) -> Sequence[VehicleSnapshot]:
+    def load(self) -> Sequence[VehicleSnapshot]:
         hashes: tuple[_VehicleHash, ...] = run(
             self._provider,
             lambda client: tuple(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   loadDepartures,
   loadLines,
@@ -21,6 +21,7 @@ export type TransitData = {
   departuresLoading: boolean
   status: ConnectionStatus
   error: string | null
+  version: number | null
 }
 
 export function useLiveTransit(stopIds: string[]): TransitData {
@@ -32,6 +33,8 @@ export function useLiveTransit(stopIds: string[]): TransitData {
   const [requestError, setRequestError] = useState<string | null>(null)
   const [socketError, setSocketError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
+  const [version, setVersion] = useState<number | null>(null)
+  const versionRef = useRef<number | null>(null)
   const stopKey = stopIds.join(',')
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export function useLiveTransit(stopIds: string[]): TransitData {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [version])
 
   useEffect(() => {
     let socket: WebSocket | null = null
@@ -70,6 +73,10 @@ export function useLiveTransit(stopIds: string[]): TransitData {
         const message = parseMessage(event.data)
         if (message === null) return
         setVehicles(message.vehicles.map(toVehicle))
+        if (typeof message.version === 'number' && versionRef.current !== message.version) {
+          versionRef.current = message.version
+          setVersion(message.version)
+        }
         setRevision((value) => value + 1)
       }
       socket.onerror = () => {
@@ -116,7 +123,7 @@ export function useLiveTransit(stopIds: string[]): TransitData {
   const departuresLoading =
     stopIds.length > 0 && departureState?.stopKey !== stopKey && requestError === null
   const error = [requestError, socketError].filter((item) => item !== null).join(' | ') || null
-  return { lines, stops, vehicles, departures, departuresLoading, status, error }
+  return { lines, stops, vehicles, departures, departuresLoading, status, error, version }
 }
 
 function parseMessage(raw: string): LiveMessage | null {
@@ -153,6 +160,7 @@ function mergeDepartures(items: Departure[]): Departure[] {
 type LiveMessage = {
   type: 'snapshot' | 'update'
   vehicles: LiveVehicle[]
+  version?: number | null
 }
 
 type DepartureState = {

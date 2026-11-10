@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import override
 
+import orjson
 from confluent_kafka import Producer
 
 from waw_transit_pipeline.core.config import KafkaConfigLoader
@@ -25,6 +26,7 @@ def open_kafka_publishers() -> Iterator[_KafkaPublishers]:
         yield _KafkaPublishers(
             buses=_KafkaPublisher(producer, config.topics["bus"]),
             trams=_KafkaPublisher(producer, config.topics["tram"]),
+            versions=_KafkaPublisher(producer, config.version_topic),
         )
     finally:
         producer.flush(5.0)
@@ -36,8 +38,10 @@ class _KafkaPublisher(Publisher):
         self._topic = topic
 
     @override
-    def publish(self, payload: bytes) -> None:
-        self._producer.produce(self._topic, payload, callback=self._delivery_report)
+    def publish(self, payload: object) -> None:
+        self._producer.produce(
+            self._topic, orjson.dumps(payload), callback=self._delivery_report
+        )
 
     @override
     def poll(self) -> None:
@@ -57,3 +61,4 @@ class _KafkaPublisher(Publisher):
 class _KafkaPublishers:
     buses: Publisher
     trams: Publisher
+    versions: Publisher

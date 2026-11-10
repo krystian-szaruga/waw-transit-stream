@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Sequence
 
-from waw_transit_backend.application.ports import LiveVehicleStream
+from waw_transit.core import LiveVehicleStream
 from waw_transit_backend.application.services.departure_service import DepartureService
 from waw_transit_backend.application.services.vehicle_service import VehicleService
 from waw_transit_backend.domain import DepartureView, VehicleView

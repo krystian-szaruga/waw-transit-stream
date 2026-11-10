@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from waw_transit.core import ReadRepository, VehicleSnapshot
+from waw_transit.core import ParameterlessReadRepository, ReadRepository, VehicleSnapshot
 from waw_transit_backend.domain import NotFoundError, VehicleView
 
 
@@ -10,7 +10,7 @@ class VehicleService:
 
     def __init__(
         self,
-        all_vehicles: ReadRepository[None, Sequence[VehicleSnapshot]],
+        all_vehicles: ParameterlessReadRepository[Sequence[VehicleSnapshot]],
         line_vehicles: ReadRepository[tuple[int, str], Sequence[VehicleSnapshot]],
         vehicle_by_id: ReadRepository[str, VehicleSnapshot | None],
     ) -> None:
@@ -19,7 +19,7 @@ class VehicleService:
         self._vehicle_by_id = vehicle_by_id
 
     def all(self) -> Sequence[VehicleView]:
-        return tuple(self._to_view(snapshot) for snapshot in self._all_vehicles.load(None))
+        return tuple(self._to_view(snapshot) for snapshot in self._all_vehicles.load())
 
     def by_line(self, vehicle_type: int, line: str) -> Sequence[VehicleView]:
         return tuple(

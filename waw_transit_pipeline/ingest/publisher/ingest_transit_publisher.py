@@ -1,5 +1,3 @@
-import orjson
-
 from waw_transit_pipeline.core.ports import LiveVehicleClient, Publisher
 from waw_transit_pipeline.ingest.publisher.log_publishing import log_publishing
 
@@ -13,5 +11,5 @@ class IngestTransitPublisher:
     def execute(self) -> int:
         if not (vehicles := self._client.fetch()): return 0
         for v in vehicles:
-            self._publisher.publish(orjson.dumps(v))
+            self._publisher.publish(v)
         return len(vehicles)

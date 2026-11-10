@@ -1,4 +1,4 @@
-from .ports import Clock, LiveVehicleStream
+from .ports import Clock
 from .services import (
     DepartureService,
     LineService,
@@ -12,7 +12,6 @@ __all__ = [
     "DepartureService",
     "LineService",
     "LiveFeedService",
-    "LiveVehicleStream",
     "StopService",
     "VehicleService",
 ]

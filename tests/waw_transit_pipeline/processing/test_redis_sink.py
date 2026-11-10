@@ -9,7 +9,7 @@ import pytest
 
 from waw_transit_pipeline.processing.assignment.schema import Schema
 from waw_transit_pipeline.processing.model import TripMatchCol, MatchStatus
-from waw_transit.database.redis import RedisSession
+from waw_transit.database.redis.session import RedisSession
 from waw_transit.database.redis import create_live_state_repository
 from waw_transit_pipeline.processing.sink import LiveStatePreparer
 

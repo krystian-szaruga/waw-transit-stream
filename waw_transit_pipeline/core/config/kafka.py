@@ -12,6 +12,7 @@ class KafkaConfig:
     client_id: str
     starting_offsets: str
     topics: dict[str, str]
+    version_topic: str
 
 
 class KafkaConfigLoader(ConfigLoader[KafkaConfig]):
@@ -25,4 +26,7 @@ class KafkaConfigLoader(ConfigLoader[KafkaConfig]):
                 "bus": self._env_reader.get("KAFKA_TOPIC_BUSES", "warsaw_transit_buses_raw"),
                 "tram": self._env_reader.get("KAFKA_TOPIC_TRAMS", "warsaw_transit_trams_raw"),
             },
+            version_topic=self._env_reader.get(
+                "KAFKA_TOPIC_GTFS_VERSION", "warsaw_transit_gtfs_versions"
+            ),
         )
