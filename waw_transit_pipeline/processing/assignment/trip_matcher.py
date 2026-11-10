@@ -260,13 +260,14 @@ class _Rows:
             return (
                 int(ping.vehicle_type), ping.vehicle_number, ping.brigade, ping.line,
                 None, None, None, None, MatchStatus.UNMATCHED, ping.ts, self._version_id,
-                ping.lon, ping.lat, None,
+                ping.lon, ping.lat, None, None,
             )
         status = MatchStatus.LAYOVER if self._is_layover(match) else MatchStatus.MATCHED
         return (
             int(ping.vehicle_type), ping.vehicle_number, ping.brigade, ping.line,
             match.trip.trip_id, match.dist_m, match.delay_sec, match.cost, status, ping.ts,
             self._version_id, ping.lon, ping.lat, int(match.trip.seq[match.seg + 1]),
+            str(match.trip.stop_name[match.seg + 1]),
         )
 
     def frame(self, pdf: pd.DataFrame, pings: list[_LivePing], matches: list[Match | None]) -> pd.DataFrame:

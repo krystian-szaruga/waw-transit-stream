@@ -25,6 +25,7 @@ class VehicleSnapshot:
     lat: float
     lon: float
     match_status: str
+    next_stop: str | None = None
 
     @property
     def vehicle_id(self) -> str:

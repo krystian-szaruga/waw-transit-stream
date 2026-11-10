@@ -41,6 +41,7 @@ class VehicleValidation:
             lat=float(row[TripMatchCol.LAT.value]),
             lon=float(row[TripMatchCol.LON.value]),
             match_status=str(row[TripMatchCol.MATCH_STATUS.value]),
+            next_stop=_optional_str(row[TripMatchCol.NEXT_STOP.value]),
         )
 
     def _is_valid(self, snapshot: VehicleSnapshot) -> bool:
@@ -74,3 +75,7 @@ def _required(row: Row, column: TripMatchCol) -> str | int:
     if value is None:
         raise ValueError(f"Missing {column.value}")
     return value
+
+
+def _optional_str(value: object) -> str | None:
+    return None if value is None else str(value)

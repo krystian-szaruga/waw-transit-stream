@@ -128,6 +128,7 @@ class _VehicleHash:
                 lat=float(self.fields["lat"]),
                 lon=float(self.fields["lon"]),
                 match_status=self.fields["match_status"],
+                next_stop=self.fields.get("next_stop") or None,
             )
         except (KeyError, TypeError, ValueError):
             return None

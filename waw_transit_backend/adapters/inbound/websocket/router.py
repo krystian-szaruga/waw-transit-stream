@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, WebSocket
 from fastapi.websockets import WebSocketDisconnect
 
@@ -23,10 +25,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     queue = await hub.connect(websocket)
     try:
         message = SubscribeMessage.model_validate(await websocket.receive_json())
-        await hub.send(websocket, _snapshot_message(service.snapshot(message.stop_id, message.line)))
+        snapshot = await asyncio.to_thread(service.snapshot, message.stop_id, message.line)
+        await hub.send(websocket, _snapshot_message(snapshot))
         while True:
             items = await queue.get()
-            await hub.send(websocket, _update_message(_for_subscription(items, message, service)))
+            filtered = await asyncio.to_thread(_for_subscription, items, message, service)
+            await hub.send(websocket, _update_message(filtered))
     except WebSocketDisconnect:
         pass
     finally:

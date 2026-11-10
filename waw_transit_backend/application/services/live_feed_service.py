@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Sequence
 
 from waw_transit_backend.application.ports import LiveVehicleStream
@@ -9,6 +10,7 @@ from waw_transit_backend.domain import DepartureView, VehicleView
 
 
 class LiveFeedService:
+    _MIN_UPDATE_INTERVAL_SEC = 1.0
 
     def __init__(
         self,
@@ -39,8 +41,14 @@ class LiveFeedService:
         stop_id: str | None = None,
         line: str | None = None,
     ) -> AsyncIterator[list[VehicleView | DepartureView]]:
+        loop = asyncio.get_running_loop()
+        last = float("-inf")
         async for _ in self._stream.stream():
-            yield self.snapshot(stop_id, line)
+            now = loop.time()
+            if now - last < self._MIN_UPDATE_INTERVAL_SEC:
+                continue
+            last = now
+            yield await asyncio.to_thread(self.snapshot, stop_id, line)
 
     def departures_for(self, stop_id: str) -> Sequence[DepartureView]:
         return self._departures.for_stop(stop_id)

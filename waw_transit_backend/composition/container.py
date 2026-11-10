@@ -21,12 +21,17 @@ from waw_transit.database.redis.vehicle_reader import (
     create_line_vehicles_reader,
     create_vehicle_reader,
 )
+from waw_transit_backend.adapters.outbound.postgres.scheduled_departures import (
+    create_scheduled_departures_reader,
+)
+from waw_transit_backend.adapters.outbound.postgres.trip_stops import create_trip_stops_reader
 from waw_transit_backend.application.ports import Clock, LiveVehicleStream
 from waw_transit_backend.application.services import (
     DepartureService,
     LineService,
     LiveFeedService,
     StopService,
+    TripService,
     VehicleService,
 )
 
@@ -37,6 +42,7 @@ class AppContainer:
     stop_service: StopService
     departure_service: DepartureService
     line_service: LineService
+    trip_service: TripService
     live_feed_service: LiveFeedService
 
 
@@ -45,12 +51,13 @@ def create_container() -> AppContainer:
         create_all_vehicles_reader(),
         create_line_vehicles_reader(),
         create_vehicle_reader(),
-        create_trip_reader(),
     )
     departure_service = DepartureService(
         create_stop_departures_reader(),
+        create_scheduled_departures_reader(),
         create_stop_reader(),
         create_trip_reader(),
+        create_vehicle_reader(),
         _SystemClock(),
     )
     return AppContainer(
@@ -58,6 +65,7 @@ def create_container() -> AppContainer:
         stop_service=StopService(create_all_stops_reader(), create_stop_reader()),
         departure_service=departure_service,
         line_service=LineService(create_lines_reader()),
+        trip_service=TripService(create_trip_stops_reader()),
         live_feed_service=LiveFeedService(
             vehicle_service,
             departure_service,
@@ -116,6 +124,7 @@ def _parse_update(raw: str) -> VehicleSnapshot | None:
             lat=float(data["lat"]),
             lon=float(data["lon"]),
             match_status=str(data["match_status"]),
+            next_stop=str(data.get("next_stop") or "") or None,
         )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return None

@@ -1,110 +1,220 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import L from 'leaflet'
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
 import './App.css'
-import { departures, lines, stops, vehicles, type Stop, type Vehicle } from './mocks'
+import type { Departure, Stop, TripStop } from './api'
+import { loadTripStops } from './api'
+import { useLiveTransit } from './useLiveTransit'
 
-function formatDelay(delaySec: number): string {
-  const minutes = Math.round(delaySec / 60)
-  if (minutes === 0) return 'on time'
-  return minutes > 0 ? `+${minutes} min` : `${minutes} min`
+function formatTime(value: string): string {
+  return new Date(value).toLocaleTimeString('pl-PL', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Warsaw',
+  })
 }
 
-function delayClass(delaySec: number): string {
+function serviceDate(value: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Warsaw',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
+
+function formatDelay(delaySec: number | null): string {
+  if (delaySec === null) return 'scheduled'
+  const minutes = Math.round(delaySec / 60)
+  if (minutes === 0) return 'on time'
+  return minutes > 0 ? `delayed +${minutes} min` : `early ${Math.abs(minutes)} min`
+}
+
+function delayClass(delaySec: number | null): string {
+  if (delaySec === null) return 'scheduled'
   if (delaySec > 120) return 'late'
   if (delaySec < -60) return 'early'
   return 'ok'
 }
 
-function vehicleIcon(item: Vehicle, selected: boolean) {
-  return L.divIcon({
-    className: selected ? 'vehicle-marker selected' : 'vehicle-marker',
-    html: `<span role="button" aria-label="Vehicle ${item.line} ${item.number}" style="background:${item.color}">${item.line}</span>`,
-    iconSize: [32, 22],
-    iconAnchor: [16, 11],
-  })
+function minutesLabel(minutes: number): string {
+  if (minutes < 0) return 'departed'
+  return minutes === 0 ? 'now' : `${minutes} min`
 }
 
-function ResizeMap() {
-  const map = useMap()
-
-  useEffect(() => {
-    map.invalidateSize()
-    const timer = window.setTimeout(() => map.invalidateSize(), 0)
-    return () => window.clearTimeout(timer)
-  }, [map])
-
-  return null
+function scheduledLabel(item: Departure): string | null {
+  if (item.scheduledMinutes < 0) return null
+  return minutesLabel(item.scheduledMinutes)
 }
 
-function stopIcon(item: Stop, selected: boolean, showLabel: boolean) {
-  const label = showLabel ? `<span class="stop-label">${item.name}</span>` : ''
-  return L.divIcon({
-    className: selected ? 'stop-marker selected' : 'stop-marker',
-    html: `<span class="stop-inner" role="button" aria-label="Stop ${item.name}">${label}<span class="stop-dot"></span></span>`,
-    iconSize: showLabel ? [150, 34] : [14, 14],
-    iconAnchor: showLabel ? [75, 30] : [7, 7],
-  })
+function DepartureRow({
+  item,
+  selected,
+  onSelect,
+}: {
+  item: Departure
+  selected: boolean
+  onSelect: (item: Departure) => void
+}) {
+  const predicted = item.predicted
+  const live = predicted !== null
+  return (
+    <li
+      className={`${live ? 'departure live' : 'departure scheduled'} selectable${selected ? ' selected' : ''}`}
+      tabIndex={0}
+      onClick={() => onSelect(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect(item)
+        }
+      }}
+    >
+      <span className="line-badge" style={{ background: item.color }}>
+        {item.line}
+      </span>
+      <div className="departure-main">
+        <span className="direction">{item.direction || 'Unknown direction'}</span>
+        <span className="timing">
+          <span className="timing-label">Scheduled:</span> {formatTime(item.scheduled)}
+          {scheduledLabel(item) !== null ? ` (${scheduledLabel(item)})` : ''}
+        </span>
+        {predicted !== null && (
+          <span className="timing live">
+            <span className="timing-label">Live:</span> {formatTime(predicted)}
+            {` (${minutesLabel(item.minutes)})`}
+          </span>
+        )}
+      </div>
+      <span className={`delay ${delayClass(item.delaySec)}`}>
+        {live ? formatDelay(item.delaySec) : 'scheduled'}
+      </span>
+    </li>
+  )
 }
 
-function ZoomWatcher({ onChange }: { onChange: (zoom: number) => void }) {
-  const map = useMapEvents({ zoomend: () => onChange(map.getZoom()) })
-
-  useEffect(() => {
-    onChange(map.getZoom())
-  }, [map, onChange])
-
-  return null
+function TripStopItem({
+  stop,
+  state,
+  selected,
+  delaySec,
+}: {
+  stop: TripStop
+  state: 'past' | 'current' | 'future'
+  selected: boolean
+  delaySec: number | null
+}) {
+  const predicted =
+    state === 'past' || delaySec === null
+      ? null
+      : new Date(new Date(stop.scheduled).getTime() + delaySec * 1000)
+  return (
+    <li className={`trip-stop ${state}${selected ? ' selected' : ''}`}>
+      <span className="trip-stop-name">{stop.name}</span>
+      <span className="trip-stop-time">
+        {formatTime(stop.scheduled)}
+        {predicted !== null && <span className="trip-stop-live">{formatTime(predicted.toISOString())}</span>}
+      </span>
+    </li>
+  )
 }
-
-
 
 function App() {
-  const [line, setLine] = useState<string | null>(null)
-  const [vehicleId, setVehicleId] = useState<string | null>(null)
-  const [stopId, setStopId] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<StopGroup | null>(null)
   const [stopQuery, setStopQuery] = useState('')
-  const [zoom, setZoom] = useState(13)
-  const mapRef = useRef<L.Map | null>(null)
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [tripStops, setTripStops] = useState<TripStop[]>([])
+  const [tripLoading, setTripLoading] = useState(false)
+  const [tripError, setTripError] = useState<string | null>(null)
+  const [showPast, setShowPast] = useState(false)
+  const tripDetailRef = useRef<HTMLDivElement | null>(null)
+  const stopIds = useMemo(() => selectedGroup?.stopIds ?? [], [selectedGroup])
+  const { stops, departures, departuresLoading, status, error } = useLiveTransit(stopIds)
 
-  const visible = useMemo(
-    () => vehicles.filter((item) => line === null || item.line === line),
-    [line],
-  )
-
-  const vehicle = vehicles.find((item) => item.id === vehicleId) ?? null
-  const stop = stops.find((item) => item.id === stopId) ?? null
+  const stopGroups = useMemo(() => groupStops(stops), [stops])
   const matchingStops = useMemo(
     () =>
       stopQuery.trim() === ''
         ? []
-        : stops.filter((item) => item.name.toLowerCase().includes(stopQuery.trim().toLowerCase())),
-    [stopQuery],
+        : stopGroups
+            .filter((item) => item.name.toLowerCase().includes(stopQuery.trim().toLowerCase()))
+            .slice(0, 20),
+    [stopQuery, stopGroups],
   )
-  const stopDepartures = useMemo(
-    () => departures.filter((item) => item.stopId === stopId).sort((a, b) => a.minutes - b.minutes),
-    [stopId],
+  const sortedDepartures = useMemo(
+    () =>
+      [...departures].sort(
+        (a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime(),
+      ),
+    [departures],
   )
+  const selectedTrip =
+    selectedTripId === null
+      ? null
+      : sortedDepartures.find((item) => item.tripId === selectedTripId) ?? null
+  const referenceSequence =
+    selectedTrip === null
+      ? null
+      : selectedTrip.vehicleNextSequence ?? selectedTrip.stopSequence
+  const pastStops = useMemo(
+    () =>
+      referenceSequence === null
+        ? []
+        : tripStops.filter((stop) => stop.sequence < referenceSequence),
+    [tripStops, referenceSequence],
+  )
+  const currentStop =
+    referenceSequence === null
+      ? null
+      : tripStops.find((stop) => stop.sequence === referenceSequence) ?? null
+  const futureStops = useMemo(
+    () =>
+      referenceSequence === null
+        ? []
+        : tripStops.filter((stop) => stop.sequence > referenceSequence),
+    [tripStops, referenceSequence],
+  )
+  const liveDelay = selectedTrip?.live ? selectedTrip.delaySec : null
+  const firstStop = tripStops.length > 0 ? tripStops[0] : null
+  const hiddenPastStops = pastStops.filter((stop) => stop.sequence !== firstStop?.sequence)
+
+  const selectedTripDate =
+    selectedTrip === null ? null : serviceDate(selectedTrip.scheduled)
 
   useEffect(() => {
-    if (stop) mapRef.current?.setView([stop.lat, stop.lon], 15)
-    else if (vehicle) mapRef.current?.setView([vehicle.lat, vehicle.lon], 15)
-  }, [stop, vehicle])
+    if (selectedTripId === null || selectedTripDate === null) return
+    let cancelled = false
+    setTripLoading(true)
+    setTripError(null)
+    loadTripStops(selectedTripId, selectedTripDate)
+      .then((items) => {
+        if (!cancelled) setTripStops(items)
+      })
+      .catch(() => {
+        if (!cancelled) setTripError('Could not load trip stops.')
+      })
+      .finally(() => {
+        if (!cancelled) setTripLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTripId, selectedTripDate])
 
-  const selectVehicle = (id: string) => {
-    setVehicleId(id)
-    setStopId(null)
+  useEffect(() => {
+    const element = tripDetailRef.current
+    if (selectedTripId !== null && element !== null && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [selectedTripId])
+
+  const toggleTrip = (departure: Departure) => {
+    setSelectedTripId((current) => (current === departure.tripId ? null : departure.tripId))
+    setShowPast(false)
   }
 
-  const selectStop = (id: string) => {
-    setStopId(id)
-    setVehicleId(null)
-  }
-
-  const clearSelection = () => {
-    setStopId(null)
-    setVehicleId(null)
+  const selectStop = (group: StopGroup) => {
+    setSelectedGroup(group)
+    setSelectedTripId(null)
+    setStopQuery('')
   }
 
   return (
@@ -115,174 +225,195 @@ function App() {
           <span className="subtitle">live</span>
         </div>
 
-        <div className="search">
-          <input
-            type="search"
-            placeholder="Search stop"
-            aria-label="Search stop"
-            value={stopQuery}
-            onChange={(event) => setStopQuery(event.target.value)}
-          />
-          {matchingStops.length > 0 && (
-            <ul className="search-results" aria-label="Stop results">
-              {matchingStops.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectStop(item.id)
-                      setStopQuery('')
-                    }}
-                  >
-                    {item.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="lines">
-          <button
-            type="button"
-            className={line === null ? 'chip active' : 'chip'}
-            onClick={() => setLine(null)}
-          >
-            All
+        <nav className="tabs" aria-label="Views">
+          <button type="button" className="tab active">
+            Live departures
           </button>
-          {lines.map((item) => (
-            <button
-              key={item.name}
-              type="button"
-              className={line === item.name ? 'chip active' : 'chip'}
-              style={{ borderColor: item.color }}
-              onClick={() => setLine(item.name)}
-            >
-              {item.name}
-            </button>
-          ))}
-        </div>
+          <button type="button" className="tab" disabled title="Coming soon">
+            Timetable
+          </button>
+          <button type="button" className="tab" disabled title="Coming soon">
+            Routes
+          </button>
+          <button type="button" className="tab" disabled title="Coming soon">
+            Map
+          </button>
+        </nav>
 
-        <div className="status">
-          <span className="dot" />
-          live
+        <div className="status" title={error ?? undefined}>
+          <span className={status === 'live' ? 'dot' : 'dot offline'} />
+          {status}
         </div>
       </header>
 
-      <main className="layout">
-        <section className="map" aria-label="Vehicle map">
-          <MapContainer
-            ref={mapRef}
-            center={[52.2297, 21.0122]}
-            zoom={13}
-            scrollWheelZoom
-            className="leaflet-map"
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      <main className="content">
+        <section className="search-panel">
+          <div className="search">
+            <input
+              type="search"
+              placeholder="Search stop"
+              aria-label="Search stop"
+              value={stopQuery}
+              onChange={(event) => setStopQuery(event.target.value)}
             />
-            <ResizeMap />
-            <ZoomWatcher onChange={setZoom} />
-
-            {stops.map((item) => (
-              <Marker
-                key={`${item.id}-${stopId === item.id}-${zoom >= 15}`}
-                position={[item.lat, item.lon]}
-                icon={stopIcon(item, stopId === item.id, zoom >= 15 || stopId === item.id)}
-                zIndexOffset={stopId === item.id ? 1000 : 300}
-                eventHandlers={{ click: () => selectStop(item.id) }}
-              />
-            ))}
-
-            {visible.map((item) => (
-              <Marker
-                key={`${item.id}-${vehicleId === item.id}`}
-                position={[item.lat, item.lon]}
-                icon={vehicleIcon(item, vehicleId === item.id)}
-                eventHandlers={{ click: () => selectVehicle(item.id) }}
-              />
-            ))}
-          </MapContainer>
-
-          <div className="legend">
-            {lines.map((item) => (
-              <span key={item.name}>
-                <i style={{ background: item.color }} />
-                {item.name}
-              </span>
-            ))}
+            {matchingStops.length > 0 && (
+              <ul className="search-results" aria-label="Stop results">
+                {matchingStops.map((item) => (
+                  <li key={item.name}>
+                    <button type="button" onClick={() => selectStop(item)}>
+                      {item.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
 
-        <aside className="panel">
-          {vehicle ? (
-            <div className="details">
-              <button type="button" className="back" onClick={clearSelection}>
-                ← Back
-              </button>
-              <div className="row">
-                <span className="badge" style={{ background: vehicle.color }}>
-                  {vehicle.line}
-                </span>
-                <span className="muted">brigade {vehicle.brigade}</span>
+        {error && (
+          <div className="error-banner" role="alert">
+            {error}
+          </div>
+        )}
+
+        {selectedGroup === null ? (
+          <section className="empty">
+            <h1>Live departures</h1>
+            <p>Select a stop to see upcoming departures.</p>
+          </section>
+        ) : (
+          <section className="board">
+            <div className="board-header">
+              <div>
+                <h1>{selectedGroup.name}</h1>
+                <p className="muted">
+                  Upcoming departures
+                  {selectedGroup.stopIds.length > 1
+                    ? ` · ${selectedGroup.stopIds.length} platforms`
+                    : ''}
+                </p>
               </div>
-              <h2>{vehicle.nextStop}</h2>
-              <p className={delayClass(vehicle.delaySec)}>
-                {formatDelay(vehicle.delaySec)}
-              </p>
-              <dl>
-                <dt>Vehicle</dt>
-                <dd>
-                  {vehicle.type}:{vehicle.number}
-                </dd>
-                <dt>Trip</dt>
-                <dd>{vehicle.tripId}</dd>
-                <dt>Status</dt>
-                <dd>{vehicle.status}</dd>
-              </dl>
-            </div>
-          ) : stop ? (
-            <div className="departures">
-              <button type="button" className="back" onClick={clearSelection}>
-                ← Back
+              <button type="button" className="back" onClick={() => {
+                  setSelectedGroup(null)
+                  setSelectedTripId(null)
+                }}>
+                ← Change stop
               </button>
-              <h2>{stop.name}</h2>
-              <ul>
-                {stopDepartures.map((item) => (
-                  <li key={`${item.line}-${item.direction}-${item.minutes}`}>
-                    <span className="badge" style={{ background: item.color }}>
-                      {item.line}
-                    </span>
-                    <span className="direction">{item.direction}</span>
-                    <span className="minutes">in {item.minutes} min</span>
-                    <span className={delayClass(item.delaySec)}>{formatDelay(item.delaySec)}</span>
-                  </li>
-                ))}
-                {stopDepartures.length === 0 && <li className="empty">No departures</li>}
-              </ul>
             </div>
-          ) : (
-            <div className="hint">
-              <h2>Pick a point on the map</h2>
-              <p className="muted">Click a vehicle or a stop.</p>
-              <ul className="vehicle-list" aria-label="Vehicles">
-                {visible.map((item) => (
-                  <li key={item.id} onClick={() => selectVehicle(item.id)}>
-                    <span className="badge" style={{ background: item.color }}>
-                      {item.line}
-                    </span>
-                    <span>{item.nextStop}</span>
-                    <span className={delayClass(item.delaySec)}>{formatDelay(item.delaySec)}</span>
-                  </li>
+
+            {selectedTrip !== null && (
+              <div className="trip-detail" ref={tripDetailRef}>
+                <div className="trip-detail-header">
+                  <h2>
+                    {selectedTrip.line} → {selectedTrip.direction}
+                  </h2>
+                  <button type="button" className="back" onClick={() => setSelectedTripId(null)}>
+                    Close
+                  </button>
+                </div>
+                {tripLoading ? (
+                  <div className="loading" role="status">
+                    <span className="spinner" />
+                    Loading trip stops…
+                  </div>
+                ) : tripError !== null ? (
+                  <p className="empty-row">{tripError}</p>
+                ) : (
+                  <ol className="trip-stops" aria-label="Trip stops">
+                    {firstStop !== null &&
+                      referenceSequence !== null &&
+                      firstStop.sequence < referenceSequence && (
+                        <TripStopItem
+                          key={`${firstStop.sequence}-${firstStop.name}`}
+                          stop={firstStop}
+                          state="past"
+                          selected={firstStop.sequence === selectedTrip?.stopSequence}
+                          delaySec={liveDelay}
+                        />
+                      )}
+                    {hiddenPastStops.length > 0 && (
+                      <li className="trip-stop past-toggle">
+                        <button
+                          type="button"
+                          className="past-button"
+                          onClick={() => setShowPast((value) => !value)}
+                        >
+                          {showPast ? 'Hide stops' : '…'}
+                        </button>
+                      </li>
+                    )}
+                    {showPast &&
+                      hiddenPastStops.map((stop) => (
+                        <TripStopItem
+                          key={`${stop.sequence}-${stop.name}`}
+                          stop={stop}
+                          state="past"
+                          selected={stop.sequence === selectedTrip?.stopSequence}
+                          delaySec={liveDelay}
+                        />
+                      ))}
+                    {currentStop !== null && (
+                      <TripStopItem
+                        key={`${currentStop.sequence}-${currentStop.name}`}
+                        stop={currentStop}
+                        state="current"
+                        selected={currentStop.sequence === selectedTrip?.stopSequence}
+                        delaySec={liveDelay}
+                      />
+                    )}
+                    {futureStops.map((stop) => (
+                      <TripStopItem
+                        key={`${stop.sequence}-${stop.name}`}
+                        stop={stop}
+                        state="future"
+                        selected={stop.sequence === selectedTrip?.stopSequence}
+                        delaySec={liveDelay}
+                      />
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
+            {departuresLoading ? (
+              <div className="loading" role="status">
+                <span className="spinner" />
+                Loading departures…
+              </div>
+            ) : sortedDepartures.length === 0 ? (
+              <p className="empty-row">No departures at this time.</p>
+            ) : (
+              <ul className="departures" aria-label="Departures">
+                {sortedDepartures.map((item) => (
+                  <DepartureRow
+                    key={`${item.tripId}-${item.scheduled}`}
+                    item={item}
+                    selected={selectedTrip?.tripId === item.tripId}
+                    onSelect={toggleTrip}
+                  />
                 ))}
               </ul>
-            </div>
-          )}
-        </aside>
+            )}
+
+          </section>
+        )}
       </main>
     </div>
   )
 }
 
 export default App
+
+type StopGroup = {
+  name: string
+  stopIds: string[]
+}
+
+function groupStops(stops: Stop[]): StopGroup[] {
+  const groups = new Map<string, string[]>()
+  for (const stop of stops) {
+    const ids = groups.get(stop.name) ?? []
+    ids.push(stop.id)
+    groups.set(stop.name, ids)
+  }
+  return [...groups.entries()].map(([name, stopIds]) => ({ name, stopIds }))
+}
