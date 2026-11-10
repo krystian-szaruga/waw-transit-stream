@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 
 from fastapi import APIRouter, WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -34,7 +35,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         sent_version = _log_version(None, version)
         await hub.send(websocket, _snapshot_message(snapshot, version))
         while True:
-            items = await queue.get()
+            items = await _next_update(websocket, queue)
             filtered = await asyncio.to_thread(_for_subscription, items, message, service)
             version = await asyncio.to_thread(container.active_version.load)
             sent_version = _log_version(sent_version, version)
@@ -43,6 +44,27 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         pass
     finally:
         await hub.disconnect(websocket)
+
+
+async def _next_update(
+    websocket: WebSocket,
+    queue: asyncio.Queue[list[VehicleView | DepartureView]],
+) -> list[VehicleView | DepartureView]:
+    while True:
+        update = asyncio.create_task(queue.get())
+        receive = asyncio.create_task(websocket.receive())
+        done, _ = await asyncio.wait({update, receive}, return_when=asyncio.FIRST_COMPLETED)
+        if update in done:
+            receive.cancel()
+            with suppress(asyncio.CancelledError):
+                await receive
+            return update.result()
+        update.cancel()
+        with suppress(asyncio.CancelledError):
+            await update
+        message = receive.result()
+        if message["type"] == "websocket.disconnect":
+            raise WebSocketDisconnect(message.get("code", 1000))
 
 
 def _log_version(sent: int | None, current: int | None) -> int | None:

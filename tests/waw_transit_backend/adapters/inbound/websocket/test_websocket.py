@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
 
+import pytest
 import redis as redis_client
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
+
+from waw_transit_backend.adapters.inbound.websocket.router import _next_update
+from waw_transit_backend.domain import DepartureView, VehicleView
 
 VEHICLE_UPDATE = {
     "vehicle_id": "1:2001",
@@ -92,6 +98,52 @@ def test_when_an_active_version_is_stored_then_the_snapshot_carries_it(
         store.close()
 
     assert message["version"] == 42
+
+
+def test_when_the_client_disconnects_then_the_update_wait_ends() -> None:
+    queue: asyncio.Queue[list[VehicleView | DepartureView]] = asyncio.Queue()
+
+    with pytest.raises(WebSocketDisconnect):
+        asyncio.run(asyncio.wait_for(_next_update(_DisconnectingWebSocket(), queue), timeout=1))
+
+
+def test_when_an_update_is_broadcast_then_it_is_returned_while_the_client_stays_silent() -> None:
+    vehicle = _vehicle()
+    queue: asyncio.Queue[list[VehicleView | DepartureView]] = asyncio.Queue()
+    queue.put_nowait([vehicle])
+
+    items = asyncio.run(asyncio.wait_for(_next_update(_SilentWebSocket(), queue), timeout=1))
+
+    assert items == [vehicle]
+
+
+class _DisconnectingWebSocket:
+
+    async def receive(self) -> dict[str, int | str]:
+        return {"type": "websocket.disconnect", "code": 1001}
+
+
+class _SilentWebSocket:
+
+    async def receive(self) -> dict[str, int | str]:
+        await asyncio.Event().wait()
+        return {"type": "websocket.receive"}
+
+
+def _vehicle() -> VehicleView:
+    return VehicleView(
+        id="1:2001",
+        type=1,
+        number="2001",
+        line="175",
+        brigade="3",
+        trip_id="t1",
+        delay_sec=45.5,
+        status="MATCHED",
+        next_stop="Centrum",
+        lat=52.23,
+        lon=21.0,
+    )
 
 
 def _redis_client() -> redis_client.Redis:
