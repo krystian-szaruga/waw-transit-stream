@@ -2,6 +2,12 @@
 
 A live public-transit backend for Warsaw, built with **Python 3.13**, **FastAPI**, **Apache Kafka**, **Apache Spark** and **PostgreSQL/PostGIS**, with **Redis** as the live-state store. It ingests real-time GPS pings from the ZTM API, matches them to scheduled GTFS trips, and serves live vehicle positions and stop departures over REST and WebSocket, with a React map frontend.
 
+## Screenshots
+
+![Live departures](assets/screenshots/live-departures.png)
+
+![Live trip map](assets/screenshots/trip-map.png)
+
 ## Tech stack
 
 | Area | Choice |
