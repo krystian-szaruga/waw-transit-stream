@@ -1,7 +1,8 @@
 import type { Departure } from './api'
 
 export function formatTime(value: string): string {
-  return new Date(value).toLocaleTimeString('pl-PL', {
+  const rounded = new Date(Math.round(new Date(value).getTime() / 60_000) * 60_000)
+  return rounded.toLocaleTimeString('pl-PL', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Europe/Warsaw',
