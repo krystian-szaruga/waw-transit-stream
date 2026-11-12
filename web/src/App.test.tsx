@@ -259,8 +259,32 @@ describe('App', () => {
     const rows = within(departures).getAllByRole('listitem')
 
     expect(within(rows[0]).getByText('delayed +1 min')).toBeInTheDocument()
-    expect(rows[0]).toHaveTextContent('Live:')
-    expect(rows[0]).toHaveTextContent('10:32')
+    expect(rows[0]).toHaveTextContent('Scheduled: 10:32')
+    expect(rows[0]).toHaveTextContent('Live: 10:33')
+  })
+
+  it('when a departure is ninety seconds late then the rounded times and delay agree', async () => {
+    const departures = responseBodies['/api/stops/1002/departures'] as Array<Record<string, unknown>>
+    const original = departures[0]
+    departures[0] = {
+      ...original,
+      scheduled: '2026-11-09T10:29:20+01:00',
+      predicted: '2026-11-09T10:30:50+01:00',
+      minutes: 1,
+      delay_sec: 90,
+    }
+    try {
+      await renderApp()
+      await selectCentrum()
+
+      const rows = within(screen.getByRole('list', { name: 'Departures' })).getAllByRole('listitem')
+
+      expect(rows[0]).toHaveTextContent('Scheduled: 10:29')
+      expect(rows[0]).toHaveTextContent('Live: 10:31')
+      expect(within(rows[0]).getByText('delayed +2 min')).toBeInTheDocument()
+    } finally {
+      departures[0] = original
+    }
   })
 
   it('when a departure has no prediction then it is marked as schedule only', async () => {
